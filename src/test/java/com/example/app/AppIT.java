@@ -54,6 +54,13 @@ class AppIT {
     }
 
     @Test
+    void versionEndpointReturnsVersion() throws Exception {
+        HttpResponse<String> response = get("/version");
+        assertEquals(200, response.statusCode());
+        assertEquals(App.version(), response.body());
+    }
+
+    @Test
     void rejectsNonGetMethods() throws Exception {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + app.port() + "/hello"))
                 .POST(HttpRequest.BodyPublishers.noBody())

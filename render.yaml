@@ -1,0 +1,17 @@
+# Blueprint Render : https://render.com/docs/blueprint-spec
+# Le service exécute l'image publiée par la CI sur GHCR (aucune reconstruction côté Render).
+# Les déploiements sont déclenchés par la CI (deploy hook) avec un tag d'image immuable.
+services:
+  - type: web
+    name: first-app
+    runtime: image
+    image:
+      url: ghcr.io/thepja/first-app:latest
+      # Si l'image GHCR reste privée : créer un « registry credential » nommé ghcr dans Render
+      # creds:
+      #   fromRegistryCreds:
+      #     name: ghcr
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+    # Render fournit la variable PORT, lue par l'application

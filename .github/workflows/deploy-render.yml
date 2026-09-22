@@ -1,0 +1,77 @@
+name: Deploy Render
+
+# Workflow réutilisable : déploie une image GHCR sur Render via le deploy hook du service,
+# puis attend que /version renvoie la version attendue.
+#
+# Environnement GitHub « render » :
+#   - secret RENDER_DEPLOY_HOOK_URL : Render > service > Settings > Deploy Hook
+#   - variable RENDER_SERVICE_URL   : ex. https://first-app-xxxx.onrender.com (optionnelle, active la vérification)
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Image à déployer (dépôt:tag immuable)
+        required: true
+        type: string
+      version:
+        description: Version attendue sur /version
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: render
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: render
+      url: ${{ vars.RENDER_SERVICE_URL }}
+    concurrency:
+      group: deploy-render
+      cancel-in-progress: false
+    env:
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      SERVICE_URL: ${{ vars.RENDER_SERVICE_URL }}
+      IMAGE: ${{ inputs.image }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Secret RENDER_DEPLOY_HOOK_URL absent
+        if: env.RENDER_DEPLOY_HOOK_URL == ''
+        run: echo "::warning::Secret RENDER_DEPLOY_HOOK_URL non défini pour l'environnement render, déploiement ignoré."
+
+      - name: Déclencher le déploiement
+        if: env.RENDER_DEPLOY_HOOK_URL != ''
+        run: |
+          image_param=$(jq -rn --arg v "$IMAGE" '$v | @uri')
+          curl -fsS -X POST --retry 3 -o response.json "${RENDER_DEPLOY_HOOK_URL}&imgURL=${image_param}"
+          echo "Déploiement Render lancé : $(jq -r '.deploy.id // "?"' response.json) ($IMAGE)"
+
+      - name: Attendre la nouvelle version
+        if: env.RENDER_DEPLOY_HOOK_URL != '' && env.SERVICE_URL != ''
+        run: |
+          # Jusqu'à 15 minutes : pull de l'image, démarrage, éventuel réveil du plan gratuit
+          for _ in $(seq 1 60); do
+            current=$(curl -fsS --max-time 20 "${SERVICE_URL%/}/version" || true)
+            if [[ "$current" == "$VERSION" ]]; then
+              echo "Version $VERSION en ligne."
+              test "$(curl -fsS "${SERVICE_URL%/}/hello?name=Render")" = "Hello, Render!"
+              exit 0
+            fi
+            echo "Version actuelle : ${current:-indisponible}, attendue : $VERSION"
+            sleep 15
+          done
+          echo "::error::La version $VERSION n'est pas en ligne après 15 minutes."
+          exit 1
+
+      - name: Résumé
+        if: env.RENDER_DEPLOY_HOOK_URL != ''
+        run: |
+          {
+            echo "### Déployé sur Render"
+            echo "Image : \`$IMAGE\`"
+            [[ -n "$SERVICE_URL" ]] && echo "URL : $SERVICE_URL"
+          } >> "$GITHUB_STEP_SUMMARY"

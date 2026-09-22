@@ -9,6 +9,7 @@ tests, image Docker, analyse de sécurité, déploiement Kubernetes via Helm.
 |-------|---------|
 | `GET /health` | `OK` (sondes Kubernetes) |
 | `GET /hello?name=Alice` | `Hello, Alice!` |
+| `GET /version` | version déployée (ex. `1.2.3`) |
 | autre méthode que `GET` | `405 Method Not Allowed` |
 
 - Threads virtuels (Java 21) pour traiter les requêtes.
@@ -53,7 +54,8 @@ flowchart LR
     end
     subgraph CD["CD : hors PR"]
         K --> P[Publication GHCR<br/>+ attestation SLSA]
-        P -->|branche par défaut| ST[Staging]
+        P -->|branche par défaut| RD[Render]
+        P -->|branche par défaut| ST[Staging K8s]
         P -->|tag vX.Y.Z| R[Release GitHub] --> PR[Production<br/>validation manuelle]
     end
 ```
@@ -72,6 +74,7 @@ Principes appliqués :
 |---------|------|
 | `.github/workflows/ci-cd.yml` | pipeline principal (schéma ci-dessus) |
 | `.github/workflows/deploy.yml` | workflow réutilisable de déploiement Helm, appelé pour staging et production |
+| `.github/workflows/deploy-render.yml` | workflow réutilisable de déploiement sur Render |
 | `.github/workflows/codeql.yml` | analyse de sécurité du code (à chaque push/PR et chaque semaine) |
 | `.github/dependabot.yml` | mises à jour hebdomadaires : Maven, actions GitHub, images Docker |
 
@@ -131,6 +134,26 @@ networkPolicy:
     - namespaceSelector:
         matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
 ```
+
+## Render
+
+Chaque push sur la branche par défaut déploie l'image testée sur Render.
+Render ne reconstruit rien : il exécute l'image publiée sur GHCR, avec un tag immuable (`sha-xxxxxxx`).
+Le job attend ensuite que `/version` renvoie la nouvelle version, puis vérifie `/hello`.
+
+Le service est décrit dans `render.yaml` (Blueprint) : type web, plan gratuit, région Frankfurt, sonde de santé sur `/health`.
+Render fournit la variable `PORT`, que l'application lit.
+
+Mise en place (une fois) :
+
+1. **Rendre l'image publique** : *GitHub → Packages → first-app → Package settings → Change visibility → Public*.
+   Sinon, créer dans Render un *registry credential* nommé `ghcr` (token GitHub avec `read:packages`) et décommenter le bloc `creds` de `render.yaml`.
+2. **Créer le service** : *Render → New → Blueprint*, choisir ce dépôt et la branche par défaut, puis valider.
+3. **Relier la CI** : dans GitHub, créer l'environnement `render` avec :
+   - le secret `RENDER_DEPLOY_HOOK_URL` : *Render → first-app → Settings → Deploy Hook* ;
+   - la variable `RENDER_SERVICE_URL` : l'URL publique du service (ex. `https://first-app-xxxx.onrender.com`).
+
+Sur le plan gratuit, le service se met en veille après 15 minutes sans trafic ; la première requête suivante prend alors environ une minute.
 
 ## Configuration GitHub à faire une fois
 

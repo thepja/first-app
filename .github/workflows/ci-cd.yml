@@ -1,7 +1,7 @@
 name: CI/CD
 
 # Chaîne : build & tests -> image (construite une seule fois) -> scan + test Kubernetes
-#          -> publication GHCR -> staging (branche par défaut) / release + production (tags v*)
+#          -> publication GHCR -> Render + staging (branche par défaut) / release + production (tags v*)
 
 on:
   push:
@@ -263,6 +263,16 @@ jobs:
     with:
       environment: staging
       image: ghcr.io/${{ github.repository }}:${{ needs.publish.outputs.tag }}
+    secrets: inherit
+
+  deploy-render:
+    name: Deploy Render
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    needs: [build, publish]
+    uses: ./.github/workflows/deploy-render.yml
+    with:
+      image: ghcr.io/${{ github.repository }}:${{ needs.publish.outputs.tag }}
+      version: ${{ needs.build.outputs.version }}
     secrets: inherit
 
   release:

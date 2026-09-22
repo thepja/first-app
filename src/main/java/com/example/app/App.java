@@ -13,7 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Serveur HTTP minimal exposant {@code /hello} et {@code /health}. */
+/** Serveur HTTP minimal exposant {@code /hello}, {@code /health} et {@code /version}. */
 public final class App {
 
     private static final Logger LOG = System.getLogger(App.class.getName());
@@ -27,6 +27,7 @@ public final class App {
         server = HttpServer.create(new InetSocketAddress(port), 0);
         server.setExecutor(executor);
         server.createContext("/health", getOnly(ex -> respond(ex, 200, "OK")));
+        server.createContext("/version", getOnly(ex -> respond(ex, 200, version())));
         server.createContext("/hello", getOnly(ex -> respond(ex, 200, greeter.greet(queryParam(ex, "name")))));
     }
 
@@ -43,6 +44,12 @@ public final class App {
 
     public int port() {
         return server.getAddress().getPort();
+    }
+
+    /** Version du JAR (MANIFEST.MF), « dev » quand l'application ne tourne pas depuis le JAR. */
+    static String version() {
+        String version = App.class.getPackage().getImplementationVersion();
+        return version != null ? version : "dev";
     }
 
     private static HttpHandler getOnly(HttpHandler handler) {
