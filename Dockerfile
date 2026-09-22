@@ -12,12 +12,12 @@ COPY src src
 ARG REVISION=""
 ARG RENDER_GIT_COMMIT=""
 RUN --mount=type=cache,target=/root/.m2 \
-    if [ -z "$REVISION" ]; then \
-      if [ -n "$RENDER_GIT_COMMIT" ]; then REVISION="0.0.0-$(echo "$RENDER_GIT_COMMIT" | cut -c1-7)"; \
-      else REVISION=0.0.0-SNAPSHOT; fi; \
-    fi \
-    && ./mvnw -B -q package \
-      -Drevision="$REVISION" -DskipTests -Djacoco.skip=true -Dspotless.check.skip=true
+    version="$REVISION"; \
+    if [ -z "$version" ] && [ -n "$RENDER_GIT_COMMIT" ]; then \
+      version="0.0.0-$(echo "$RENDER_GIT_COMMIT" | cut -c1-7)"; \
+    fi; \
+    ./mvnw -B -q package -Drevision="${version:-0.0.0-SNAPSHOT}" \
+      -DskipTests -Djacoco.skip=true -Dspotless.check.skip=true
 
 FROM eclipse-temurin:21-jre-noble@sha256:7739f0ffce786528961eea6bf46d9610ee968ac6127c9b2e93494757bdecce9f
 WORKDIR /app

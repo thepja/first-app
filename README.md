@@ -137,7 +137,7 @@ networkPolicy:
 
 ## Render
 
-Le service Render (`render.yaml`) construit l'image à partir du `Dockerfile` de ce dépôt : type web, plan gratuit, région Frankfurt, sonde de santé sur `/health`.
+Le service Render (`render.yaml`) construit l'image à partir du `Dockerfile` de ce dépôt : type web, plan gratuit, région Oregon, sonde de santé sur `/health`.
 Render fournit la variable `PORT`, que l'application lit.
 
 Le déploiement automatique de Render est **désactivé** : c'est la CI qui déclenche le déploiement,
@@ -146,8 +146,9 @@ Le job attend ensuite que `/version` renvoie la version de ce commit (`0.0.0-<sh
 
 Mise en place (une fois) :
 
-1. **Donner à Render l'accès au dépôt** : *Render → Account Settings → Git providers → GitHub*, autoriser le dépôt `thepja/first-app`.
-2. **Relier la CI** : dans GitHub, créer l'environnement `render` avec :
+1. **Donner à Render l'accès au dépôt** : *Render → New → Web Service → GitHub → Configure GitHub* (ou *github.com/settings/installations → Render → Configure*), autoriser le dépôt `thepja/first-app`.
+2. **Réglages du service** (*Render → first-app → Settings*) : *Auto-Deploy* sur **Off** (la CI s'en charge) et *Health Check Path* sur `/health`.
+3. **Relier la CI** : dans GitHub, créer l'environnement `render` avec :
    - le secret `RENDER_DEPLOY_HOOK_URL` : *Render → first-app → Settings → Deploy Hook* ;
    - la variable `RENDER_SERVICE_URL` : l'URL publique du service (ex. `https://first-app-xxxx.onrender.com`).
 

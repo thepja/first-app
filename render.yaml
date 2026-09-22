@@ -11,7 +11,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     plan: free
-    region: frankfurt
+    region: oregon
     healthCheckPath: /health
     autoDeployTrigger: "off"
     # Render fournit la variable PORT, lue par l'application
