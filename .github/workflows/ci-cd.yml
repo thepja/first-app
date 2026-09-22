@@ -62,6 +62,8 @@ jobs:
           context: .
           load: true
           tags: first-app:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Smoke test du conteneur
         run: |
@@ -98,19 +100,97 @@ jobs:
         with:
           context: .
           push: true
+          cache-from: type=gha
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  # 3. Déploiement : release GitHub (JAR) sur les tags v*
+  # 3. Test des manifests Kubernetes sur un cluster éphémère (kind)
+  k8s-test:
+    name: Kubernetes (kind)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier que les overlays se construisent
+        run: |
+          kubectl kustomize k8s/overlays/staging > /dev/null
+          kubectl kustomize k8s/overlays/production > /dev/null
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construire l'image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: first-app:ci
+          cache-from: type=gha
+
+      - name: Créer le cluster kind
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: first-app
+
+      - name: Déployer sur kind
+        run: |
+          kind load docker-image first-app:ci --name first-app
+          scripts/k8s-deploy.sh staging first-app:ci
+
+      - name: Tester le service
+        run: |
+          kubectl -n first-app-staging port-forward svc/first-app 8080:80 &
+          sleep 3
+          test "$(curl -fs 'http://localhost:8080/hello?name=Kube')" = "Hello, Kube!"
+
+      - name: Diagnostic en cas d'échec
+        if: failure()
+        run: |
+          kubectl -n first-app-staging get all
+          kubectl -n first-app-staging describe pods
+          kubectl -n first-app-staging logs -l app=first-app --tail=100
+
+  # 4. Déploiement staging : chaque push sur main
+  deploy-staging:
+    name: Deploy staging
+    if: github.ref == 'refs/heads/main'
+    needs: [docker, k8s-test]
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Secret KUBE_CONFIG absent
+        if: env.KUBE_CONFIG == ''
+        run: echo "::warning::Secret KUBE_CONFIG non défini pour l'environnement staging, déploiement ignoré."
+
+      - name: Configurer kubectl
+        if: env.KUBE_CONFIG != ''
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBE_CONFIG" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Déployer
+        if: env.KUBE_CONFIG != ''
+        run: scripts/k8s-deploy.sh staging "${IMAGE_NAME}:sha-${GITHUB_SHA::7}"
+
+  # 5. Release + déploiement production : tags v*
   release:
-    name: Release
+    name: Release & deploy production
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: docker
+    needs: [docker, k8s-test]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     environment: production
+    env:
+      KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: first-app-jar
@@ -120,3 +200,18 @@ jobs:
         with:
           files: first-app.jar
           generate_release_notes: true
+
+      - name: Secret KUBE_CONFIG absent
+        if: env.KUBE_CONFIG == ''
+        run: echo "::warning::Secret KUBE_CONFIG non défini pour l'environnement production, déploiement ignoré."
+
+      - name: Configurer kubectl
+        if: env.KUBE_CONFIG != ''
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBE_CONFIG" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Déployer
+        if: env.KUBE_CONFIG != ''
+        run: scripts/k8s-deploy.sh production "${IMAGE_NAME}:${GITHUB_REF_NAME#v}"
