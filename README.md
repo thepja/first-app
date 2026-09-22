@@ -64,8 +64,8 @@ Principes appliqués :
 
 - **Construire une fois, déployer partout** : l'image est construite une seule fois. Ce même binaire est testé, scanné, poussé sur GHCR puis déployé en staging et en production.
 - **Tags immuables** : on déploie `sha-xxxxxxx` (staging) ou `X.Y.Z` (production), jamais `latest`.
-- **Chaîne d'approvisionnement** : actions GitHub et images de base épinglées par empreinte (SHA / digest), mises à jour par Dependabot. L'image publiée porte une attestation de provenance (vérifiable avec `gh attestation verify oci://ghcr.io/thepja/first-app:X.Y.Z --owner thepja`).
-- **Sécurité** : CodeQL sur le code, Grype sur l'image (échec si une vulnérabilité haute ou critique corrigeable est trouvée), conteneur non-root en lecture seule, permissions GitHub minimales par job.
+- **Chaîne d'approvisionnement** : actions GitHub et images de base épinglées par empreinte (SHA / digest), mises à jour par Dependabot. Si le dépôt est public, l'image publiée porte une attestation de provenance (vérifiable avec `gh attestation verify oci://ghcr.io/thepja/first-app:X.Y.Z --owner thepja`).
+- **Sécurité** : CodeQL sur le code (dépôt public uniquement, sinon GitHub Advanced Security requis), Grype sur l'image (échec si une vulnérabilité haute ou critique corrigeable est trouvée), conteneur non-root en lecture seule, permissions GitHub minimales par job.
 - **Déploiements sûrs** : `helm upgrade --atomic` (rollback automatique si les pods ne démarrent pas), mise à jour progressive sans interruption, `helm test` après chaque déploiement, un seul déploiement à la fois par environnement.
 
 ### Workflows
@@ -75,7 +75,7 @@ Principes appliqués :
 | `.github/workflows/ci-cd.yml` | pipeline principal (schéma ci-dessus) |
 | `.github/workflows/deploy.yml` | workflow réutilisable de déploiement Helm, appelé pour staging et production |
 | `.github/workflows/deploy-render.yml` | workflow réutilisable de déploiement sur Render |
-| `.github/workflows/codeql.yml` | analyse de sécurité du code (à chaque push/PR et chaque semaine) |
+| `.github/workflows/codeql.yml` | analyse de sécurité du code à chaque push/PR (dépôts publics) |
 | `.github/dependabot.yml` | mises à jour hebdomadaires : Maven, actions GitHub, images Docker |
 
 ### Versions

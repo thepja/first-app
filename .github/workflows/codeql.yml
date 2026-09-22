@@ -4,8 +4,6 @@ on:
   push:
     branches: [main, 'feat/**']
   pull_request:
-  schedule:
-    - cron: '23 4 * * 1'
 
 permissions:
   contents: read
@@ -13,6 +11,8 @@ permissions:
 jobs:
   analyze:
     name: Analyse (Java)
+    # Code scanning indisponible sur les dépôts privés sans GitHub Advanced Security
+    if: github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
