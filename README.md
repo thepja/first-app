@@ -29,7 +29,7 @@ Le port est configurable via la variable d'environnement `PORT`.
 | **Build & Test** | chaque push / PR | `mvn verify` (tests JUnit 5), JAR et rapports publiés en artefacts |
 | **Docker image** | chaque push / PR | build de l'image + smoke test du conteneur ; push sur `ghcr.io/<owner>/first-app` hors PR |
 | **Kubernetes (kind)** | chaque push / PR | `helm lint`, puis déploiement Kustomize **et** Helm sur un cluster kind éphémère, avec test du service (`helm test`) |
-| **Deploy staging** | push sur `main` | déploie via Helm l'image `sha-xxxxxxx` dans le namespace `first-app-staging` |
+| **Deploy staging** | push sur la branche par défaut (`feat/1.0`) | déploie via Helm l'image `sha-xxxxxxx` dans le namespace `first-app-staging` |
 | **Release & deploy production** | tag `v*` | release GitHub avec le JAR + déploiement Helm de l'image `X.Y.Z` dans `first-app-production` |
 
 Pour déployer une version :
@@ -38,7 +38,7 @@ Pour déployer une version :
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
-L'image est alors publiée avec les tags `1.0.0`, `sha-xxxx`, et `latest` pour la branche `main`.
+L'image est alors publiée avec les tags `1.0.0`, `sha-xxxx`, et `latest` pour la branche par défaut.
 
 ## Kubernetes
 
