@@ -44,6 +44,14 @@ jobs:
         if: env.RENDER_DEPLOY_HOOK_URL == ''
         run: echo "::warning::Secret RENDER_DEPLOY_HOOK_URL non défini pour l'environnement render, déploiement ignoré."
 
+      - name: Vérifier la configuration
+        if: env.RENDER_DEPLOY_HOOK_URL != '' && env.SERVICE_URL != ''
+        run: |
+          if [[ ! "$SERVICE_URL" =~ ^https?://[^/]+ ]]; then
+            echo "::error::La variable RENDER_SERVICE_URL doit commencer par https:// (valeur actuelle : '$SERVICE_URL')."
+            exit 1
+          fi
+
       - name: Déclencher le déploiement
         if: env.RENDER_DEPLOY_HOOK_URL != ''
         run: |
