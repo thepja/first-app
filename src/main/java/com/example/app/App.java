@@ -13,11 +13,19 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Serveur HTTP minimal exposant {@code /hello}, {@code /health} et {@code /version}. */
+/** Serveur HTTP minimal exposant {@code /}, {@code /hello}, {@code /health} et {@code /version}. */
 public final class App {
 
     private static final Logger LOG = System.getLogger(App.class.getName());
     private static final int SHUTDOWN_GRACE_SECONDS = 5;
+    private static final String INDEX =
+            """
+            first-app
+
+            GET /hello?name=Alice  -> Hello, Alice!
+            GET /health            -> OK
+            GET /version           -> version déployée
+            """;
 
     private final HttpServer server;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
@@ -26,9 +34,10 @@ public final class App {
     public App(int port) throws IOException {
         server = HttpServer.create(new InetSocketAddress(port), 0);
         server.setExecutor(executor);
-        server.createContext("/health", getOnly(ex -> respond(ex, 200, "OK")));
-        server.createContext("/version", getOnly(ex -> respond(ex, 200, version())));
-        server.createContext("/hello", getOnly(ex -> respond(ex, 200, greeter.greet(queryParam(ex, "name")))));
+        route("/", ex -> respond(ex, 200, INDEX));
+        route("/health", ex -> respond(ex, 200, "OK"));
+        route("/version", ex -> respond(ex, 200, version()));
+        route("/hello", ex -> respond(ex, 200, greeter.greet(queryParam(ex, "name"))));
     }
 
     public void start() {
@@ -52,9 +61,18 @@ public final class App {
         return version != null ? version : "dev";
     }
 
-    private static HttpHandler getOnly(HttpHandler handler) {
+    /** Enregistre une route GET sur un chemin exact (HttpServer associe sinon tous les chemins préfixés). */
+    private void route(String path, HttpHandler handler) {
+        server.createContext(path, getOnly(path, handler));
+    }
+
+    private static HttpHandler getOnly(String path, HttpHandler handler) {
         return ex -> {
             try {
+                if (!path.equals(ex.getRequestURI().getPath())) {
+                    respond(ex, 404, "Not Found");
+                    return;
+                }
                 if (!"GET".equals(ex.getRequestMethod())) {
                     ex.getResponseHeaders().set("Allow", "GET");
                     respond(ex, 405, "Method Not Allowed");

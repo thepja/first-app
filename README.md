@@ -7,10 +7,12 @@ tests, image Docker, analyse de sécurité, déploiement Kubernetes via Helm.
 
 | Route | Réponse |
 |-------|---------|
+| `GET /` | liste des routes |
 | `GET /health` | `OK` (sondes Kubernetes) |
 | `GET /hello?name=Alice` | `Hello, Alice!` |
 | `GET /version` | version déployée (ex. `1.2.3`) |
 | autre méthode que `GET` | `405 Method Not Allowed` |
+| chemin inconnu | `404 Not Found` |
 
 - Threads virtuels (Java 21) pour traiter les requêtes.
 - Arrêt propre sur `SIGTERM` : les requêtes en cours se terminent avant l'arrêt.

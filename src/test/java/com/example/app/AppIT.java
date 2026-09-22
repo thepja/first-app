@@ -1,6 +1,7 @@
 package com.example.app;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -58,6 +59,19 @@ class AppIT {
         HttpResponse<String> response = get("/version");
         assertEquals(200, response.statusCode());
         assertEquals(App.version(), response.body());
+    }
+
+    @Test
+    void rootListsRoutes() throws Exception {
+        HttpResponse<String> response = get("/");
+        assertEquals(200, response.statusCode());
+        assertTrue(response.body().contains("/hello"));
+    }
+
+    @Test
+    void unknownPathsReturn404() throws Exception {
+        assertEquals(404, get("/nope").statusCode());
+        assertEquals(404, get("/hellofoo").statusCode());
     }
 
     @Test
