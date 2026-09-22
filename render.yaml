@@ -1,17 +1,17 @@
 # Blueprint Render : https://render.com/docs/blueprint-spec
-# Le service exécute l'image publiée par la CI sur GHCR (aucune reconstruction côté Render).
-# Les déploiements sont déclenchés par la CI (deploy hook) avec un tag d'image immuable.
+# Render construit l'image à partir du Dockerfile de ce dépôt.
+# Pas de déploiement automatique sur push : la CI déclenche le déploiement (deploy hook)
+# une fois les tests passés, en désignant le commit exact qui a été validé.
 services:
   - type: web
     name: first-app
-    runtime: image
-    image:
-      url: ghcr.io/thepja/first-app:latest
-      # Si l'image GHCR reste privée : créer un « registry credential » nommé ghcr dans Render
-      # creds:
-      #   fromRegistryCreds:
-      #     name: ghcr
+    runtime: docker
+    repo: https://github.com/thepja/first-app
+    branch: feat/1.0
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     plan: free
     region: frankfurt
     healthCheckPath: /health
+    autoDeployTrigger: "off"
     # Render fournit la variable PORT, lue par l'application

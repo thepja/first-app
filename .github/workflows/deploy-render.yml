@@ -1,7 +1,8 @@
 name: Deploy Render
 
-# Workflow réutilisable : déploie une image GHCR sur Render via le deploy hook du service,
-# puis attend que /version renvoie la version attendue.
+# Workflow réutilisable : déclenche le déploiement Render d'un commit précis via le deploy hook
+# du service (Render construit l'image à partir du Dockerfile), puis attend que /version
+# renvoie la version attendue.
 #
 # Environnement GitHub « render » :
 #   - secret RENDER_DEPLOY_HOOK_URL : Render > service > Settings > Deploy Hook
@@ -10,8 +11,8 @@ name: Deploy Render
 on:
   workflow_call:
     inputs:
-      image:
-        description: Image à déployer (dépôt:tag immuable)
+      ref:
+        description: Commit à déployer (celui validé par la CI)
         required: true
         type: string
       version:
@@ -36,7 +37,7 @@ jobs:
     env:
       RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
       SERVICE_URL: ${{ vars.RENDER_SERVICE_URL }}
-      IMAGE: ${{ inputs.image }}
+      REF: ${{ inputs.ref }}
       VERSION: ${{ inputs.version }}
     steps:
       - name: Secret RENDER_DEPLOY_HOOK_URL absent
@@ -46,14 +47,13 @@ jobs:
       - name: Déclencher le déploiement
         if: env.RENDER_DEPLOY_HOOK_URL != ''
         run: |
-          image_param=$(jq -rn --arg v "$IMAGE" '$v | @uri')
-          curl -fsS -X POST --retry 3 -o response.json "${RENDER_DEPLOY_HOOK_URL}&imgURL=${image_param}"
-          echo "Déploiement Render lancé : $(jq -r '.deploy.id // "?"' response.json) ($IMAGE)"
+          curl -fsS -X POST --retry 3 -o response.json "${RENDER_DEPLOY_HOOK_URL}&ref=${REF}"
+          echo "Déploiement Render lancé : $(jq -r '.deploy.id // "?"' response.json) (commit $REF)"
 
       - name: Attendre la nouvelle version
         if: env.RENDER_DEPLOY_HOOK_URL != '' && env.SERVICE_URL != ''
         run: |
-          # Jusqu'à 15 minutes : pull de l'image, démarrage, éventuel réveil du plan gratuit
+          # Jusqu'à 15 minutes : construction de l'image par Render, démarrage, réveil du plan gratuit
           for _ in $(seq 1 60); do
             current=$(curl -fsS --max-time 20 "${SERVICE_URL%/}/version" || true)
             if [[ "$current" == "$VERSION" ]]; then
@@ -72,6 +72,6 @@ jobs:
         run: |
           {
             echo "### Déployé sur Render"
-            echo "Image : \`$IMAGE\`"
+            echo "Commit : \`$REF\` (version $VERSION)"
             [[ -n "$SERVICE_URL" ]] && echo "URL : $SERVICE_URL"
           } >> "$GITHUB_STEP_SUMMARY"

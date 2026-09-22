@@ -137,19 +137,17 @@ networkPolicy:
 
 ## Render
 
-Chaque push sur la branche par défaut déploie l'image testée sur Render.
-Render ne reconstruit rien : il exécute l'image publiée sur GHCR, avec un tag immuable (`sha-xxxxxxx`).
-Le job attend ensuite que `/version` renvoie la nouvelle version, puis vérifie `/hello`.
-
-Le service est décrit dans `render.yaml` (Blueprint) : type web, plan gratuit, région Frankfurt, sonde de santé sur `/health`.
+Le service Render (`render.yaml`) construit l'image à partir du `Dockerfile` de ce dépôt : type web, plan gratuit, région Frankfurt, sonde de santé sur `/health`.
 Render fournit la variable `PORT`, que l'application lit.
+
+Le déploiement automatique de Render est **désactivé** : c'est la CI qui déclenche le déploiement,
+uniquement sur la branche par défaut, après le succès de tous les tests, et en désignant le commit exact qui a été validé.
+Le job attend ensuite que `/version` renvoie la version de ce commit (`0.0.0-<sha>`), puis vérifie `/hello`.
 
 Mise en place (une fois) :
 
-1. **Rendre l'image publique** : *GitHub → Packages → first-app → Package settings → Change visibility → Public*.
-   Sinon, créer dans Render un *registry credential* nommé `ghcr` (token GitHub avec `read:packages`) et décommenter le bloc `creds` de `render.yaml`.
-2. **Créer le service** : *Render → New → Blueprint*, choisir ce dépôt et la branche par défaut, puis valider.
-3. **Relier la CI** : dans GitHub, créer l'environnement `render` avec :
+1. **Donner à Render l'accès au dépôt** : *Render → Account Settings → Git providers → GitHub*, autoriser le dépôt `thepja/first-app`.
+2. **Relier la CI** : dans GitHub, créer l'environnement `render` avec :
    - le secret `RENDER_DEPLOY_HOOK_URL` : *Render → first-app → Settings → Deploy Hook* ;
    - la variable `RENDER_SERVICE_URL` : l'URL publique du service (ex. `https://first-app-xxxx.onrender.com`).
 

@@ -7,10 +7,17 @@ COPY .mvn .mvn
 COPY mvnw pom.xml ./
 RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q dependency:go-offline
 COPY src src
-# Les tests et contrôles qualité sont exécutés par la CI avant la construction de l'image
-ARG REVISION=0.0.0-SNAPSHOT
-RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q package \
-    -Drevision=${REVISION} -DskipTests -Djacoco.skip=true -Dspotless.check.skip=true
+# Les tests et contrôles qualité sont exécutés par la CI avant la construction de l'image.
+# Version : REVISION (CI), sinon 0.0.0-<sha court> quand Render construit l'image, sinon SNAPSHOT.
+ARG REVISION=""
+ARG RENDER_GIT_COMMIT=""
+RUN --mount=type=cache,target=/root/.m2 \
+    if [ -z "$REVISION" ]; then \
+      if [ -n "$RENDER_GIT_COMMIT" ]; then REVISION="0.0.0-$(echo "$RENDER_GIT_COMMIT" | cut -c1-7)"; \
+      else REVISION=0.0.0-SNAPSHOT; fi; \
+    fi \
+    && ./mvnw -B -q package \
+      -Drevision="$REVISION" -DskipTests -Djacoco.skip=true -Dspotless.check.skip=true
 
 FROM eclipse-temurin:21-jre-noble@sha256:7739f0ffce786528961eea6bf46d9610ee968ac6127c9b2e93494757bdecce9f
 WORKDIR /app

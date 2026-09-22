@@ -273,7 +273,7 @@ jobs:
     needs: [build, publish]
     uses: ./.github/workflows/deploy-render.yml
     with:
-      image: ghcr.io/${{ github.repository }}:${{ needs.publish.outputs.tag }}
+      ref: ${{ github.sha }}
       version: ${{ needs.build.outputs.version }}
     secrets: inherit
 
