@@ -1,8 +1,10 @@
+# Valeurs par défaut du chart. Surchargées par values-<env>.yaml et par la CI (image.tag).
+
 replicaCount: 1
 
 image:
   repository: ghcr.io/thepja/first-app
-  # Par défaut : appVersion du chart
+  # Par défaut : appVersion du chart. La CI injecte un tag immuable (sha-xxxxxxx ou X.Y.Z).
   tag: ""
   pullPolicy: IfNotPresent
 
@@ -12,17 +14,38 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
 podAnnotations: {}
+podLabels: {}
 
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
   capabilities:
     drop: ["ALL"]
+
+# Mise à jour sans interruption : un pod de plus, jamais un de moins
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# Laisse le temps au Service de retirer le pod avant l'arrêt de la JVM
+terminationGracePeriodSeconds: 30
+preStopSleepSeconds: 5
 
 service:
   type: ClusterIP
@@ -46,8 +69,27 @@ resources:
   limits:
     memory: 256Mi
 
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# N'autorise que le trafic entrant vers le port HTTP (nécessite un CNI qui applique les NetworkPolicy)
+networkPolicy:
+  enabled: false
+  # Ex. : [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: ingress-nginx } } }]
+  # Vide = trafic autorisé depuis n'importe où, mais uniquement sur le port HTTP
+  from: []
+
+# Variables d'environnement supplémentaires
 env: {}
 
 nodeSelector: {}
 tolerations: []
 affinity: {}
+topologySpreadConstraints: []

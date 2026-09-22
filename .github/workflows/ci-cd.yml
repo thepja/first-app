@@ -1,5 +1,8 @@
 name: CI/CD
 
+# Chaîne : build & tests -> image (construite une seule fois) -> scan + test Kubernetes
+#          -> publication GHCR -> staging (branche par défaut) / release + production (tags v*)
+
 on:
   push:
     branches: [main, 'feat/**']
@@ -7,230 +10,285 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
+  LOCAL_IMAGE: first-app:ci
+  HELM_VERSION: v3.18.4
 
 jobs:
-  # 1. Tests + packaging du JAR
   build:
     name: Build & Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
 
-      - name: Tests et packaging
-        run: ./mvnw -B verify
+      # Tag v1.2.3 -> 1.2.3 ; sinon 0.0.0-<sha court>
+      - name: Calculer la version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Rapport de tests
+      # Formatage, compilation stricte, tests unitaires + intégration, couverture >= 80 %
+      - name: Build et tests
+        run: ./mvnw -B verify -Drevision=${{ steps.version.outputs.version }}
+
+      - name: Rapports de tests et couverture
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: test-reports
-          path: target/surefire-reports/
+          name: reports
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+            target/site/jacoco/
+          retention-days: 14
 
-      - name: Publier le JAR
-        uses: actions/upload-artifact@v4
+      - name: JAR
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: first-app-jar
           path: target/first-app.jar
+          retention-days: 14
 
-  # 2. Image Docker : construite et testée à chaque fois, poussée sur GHCR hors PR
-  docker:
+  chart:
+    name: Helm chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Installer kubeconform
+        run: |
+          curl -sSfLO https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
+          echo "c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3  kubeconform-linux-amd64.tar.gz" | sha256sum -c -
+          tar xzf kubeconform-linux-amd64.tar.gz kubeconform
+
+      - name: Lint et validation des manifests
+        run: |
+          for env in staging production; do
+            helm lint --strict helm/first-app -f helm/first-app/values-$env.yaml
+            helm template first-app helm/first-app -f helm/first-app/values-$env.yaml \
+              | ./kubeconform -strict -summary -
+          done
+
+  image:
     name: Docker image
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Construire l'image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          load: true
-          tags: first-app:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Smoke test du conteneur
-        run: |
-          docker run -d --rm -p 8080:8080 --name first-app first-app:ci
-          for i in $(seq 1 20); do
-            curl -fs http://localhost:8080/health && break
-            sleep 1
-          done
-          test "$(curl -fs 'http://localhost:8080/hello?name=CI')" = "Hello, CI!"
-          docker stop first-app
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Métadonnées de l'image
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ env.IMAGE_NAME }}
+
+      # L'image est construite UNE fois ; ce même binaire est testé, scanné puis publié
+      - name: Construire l'image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          build-args: REVISION=${{ needs.build.outputs.version }}
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.LOCAL_IMAGE }}
+          outputs: type=docker,dest=${{ runner.temp }}/image.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Charger l'image
+        run: docker load -i "$RUNNER_TEMP/image.tar"
+
+      - name: Smoke test du conteneur (dont arrêt propre sur SIGTERM)
+        run: |
+          docker run -d -p 8080:8080 --read-only --tmpfs /tmp --name first-app "$LOCAL_IMAGE"
+          for _ in $(seq 1 30); do curl -fs http://localhost:8080/health && break; sleep 1; done
+          test "$(curl -fs 'http://localhost:8080/hello?name=CI')" = "Hello, CI!"
+          docker stop --time 10 first-app
+          docker logs first-app
+
+      - name: Scan de vulnérabilités (Grype)
+        uses: anchore/scan-action@1638637db639e0ade3258b51db49a9a137574c3e # v6.5.1
+        with:
+          image: ${{ env.LOCAL_IMAGE }}
+          fail-build: true
+          severity-cutoff: high
+          only-fixed: true
+          output-format: table
+
+      - name: Conserver l'image pour les jobs suivants
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: image
+          path: ${{ runner.temp }}/image.tar
+          retention-days: 1
+
+  k8s-test:
+    name: Kubernetes (kind)
+    needs: [image, chart]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: image
+          path: ${{ runner.temp }}
+
+      - name: Créer le cluster kind
+        uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        with:
+          cluster_name: first-app
+
+      - name: Déployer le chart (valeurs de production)
+        run: |
+          kind load image-archive "$RUNNER_TEMP/image.tar" --name first-app
+          scripts/helm-deploy.sh production "$LOCAL_IMAGE"
+
+      - name: Test de montée de version (rolling update)
+        run: scripts/helm-deploy.sh production "$LOCAL_IMAGE" --set-string podAnnotations.rollout="$GITHUB_RUN_ID"
+
+      - name: helm test
+        run: helm test first-app -n first-app-production --logs
+
+      - name: Diagnostic en cas d'échec
+        if: failure()
+        run: |
+          kubectl -n first-app-production get all,events
+          kubectl -n first-app-production describe pods
+          kubectl -n first-app-production logs -l app.kubernetes.io/name=first-app --tail=100
+
+  publish:
+    name: Publish image
+    if: github.event_name != 'pull_request'
+    needs: [build, image, k8s-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      tag: ${{ steps.push.outputs.tag }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: image
+          path: ${{ runner.temp }}
+
+      - name: Métadonnées de l'image
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
             type=semver,pattern={{version}}
-            type=sha
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=ref,event=branch
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Connexion à GHCR
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Pousse exactement l'image testée (pas de reconstruction)
       - name: Pousser l'image
-        if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          cache-from: type=gha
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-  # 3. Test des manifests Kustomize et du chart Helm sur un cluster éphémère (kind)
-  k8s-test:
-    name: Kubernetes (kind)
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: azure/setup-helm@v4
-
-      - name: Vérifier les overlays et le chart
+        id: push
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
-          kubectl kustomize k8s/overlays/staging > /dev/null
-          kubectl kustomize k8s/overlays/production > /dev/null
-          helm lint helm/first-app -f helm/first-app/values-staging.yaml
-          helm lint helm/first-app -f helm/first-app/values-production.yaml
+          docker load -i "$RUNNER_TEMP/image.tar"
+          for tag in $TAGS; do
+            docker tag "$LOCAL_IMAGE" "$tag"
+            docker push "$tag"
+          done
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$LOCAL_IMAGE" | cut -d@ -f2)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          # Tag immuable utilisé pour les déploiements
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
 
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Construire l'image
-        uses: docker/build-push-action@v6
+      - name: Attestation de provenance (SLSA)
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
-          context: .
-          load: true
-          tags: first-app:ci
-          cache-from: type=gha
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
 
-      - name: Créer le cluster kind
-        uses: helm/kind-action@v1
-        with:
-          cluster_name: first-app
-
-      - name: Charger l'image dans kind
-        run: kind load docker-image first-app:ci --name first-app
-
-      - name: Déployer avec Kustomize
-        run: scripts/k8s-deploy.sh staging first-app:ci
-
-      - name: Tester le service (Kustomize)
-        run: |
-          kubectl -n first-app-staging port-forward svc/first-app 8080:80 &
-          pf=$!
-          sleep 3
-          test "$(curl -fs 'http://localhost:8080/hello?name=Kube')" = "Hello, Kube!"
-          kill $pf
-          kubectl delete namespace first-app-staging --wait
-
-      - name: Déployer avec Helm
-        run: scripts/helm-deploy.sh staging first-app:ci
-
-      - name: Tester le service (helm test)
-        run: helm test first-app -n first-app-staging --logs
-
-      - name: Diagnostic en cas d'échec
-        if: failure()
-        run: |
-          kubectl -n first-app-staging get all
-          kubectl -n first-app-staging describe pods
-          kubectl -n first-app-staging logs -l app=first-app --tail=100
-
-  # 4. Déploiement staging : chaque push sur la branche par défaut du dépôt
-  # Le déploiement se fait avec le chart Helm (historique + rollback automatique)
   deploy-staging:
     name: Deploy staging
     if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
-    needs: [docker, k8s-test]
-    runs-on: ubuntu-latest
-    environment: staging
-    env:
-      KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
-    steps:
-      - uses: actions/checkout@v4
+    needs: publish
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+      image: ghcr.io/${{ github.repository }}:${{ needs.publish.outputs.tag }}
+    secrets: inherit
 
-      - uses: azure/setup-helm@v4
-
-      - name: Secret KUBE_CONFIG absent
-        if: env.KUBE_CONFIG == ''
-        run: echo "::warning::Secret KUBE_CONFIG non défini pour l'environnement staging, déploiement ignoré."
-
-      - name: Configurer kubectl
-        if: env.KUBE_CONFIG != ''
-        run: |
-          mkdir -p ~/.kube
-          echo "$KUBE_CONFIG" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-
-      - name: Déployer
-        if: env.KUBE_CONFIG != ''
-        run: scripts/helm-deploy.sh staging "${IMAGE_NAME}:sha-${GITHUB_SHA::7}"
-
-  # 5. Release + déploiement production : tags v*
   release:
-    name: Release & deploy production
+    name: GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [docker, k8s-test]
+    needs: publish
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
-    environment: production
-    env:
-      KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: azure/setup-helm@v4
-
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: first-app-jar
 
-      - name: Créer la release GitHub
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: first-app.jar
           generate_release_notes: true
 
-      - name: Secret KUBE_CONFIG absent
-        if: env.KUBE_CONFIG == ''
-        run: echo "::warning::Secret KUBE_CONFIG non défini pour l'environnement production, déploiement ignoré."
-
-      - name: Configurer kubectl
-        if: env.KUBE_CONFIG != ''
-        run: |
-          mkdir -p ~/.kube
-          echo "$KUBE_CONFIG" | base64 -d > ~/.kube/config
-          chmod 600 ~/.kube/config
-
-      - name: Déployer
-        if: env.KUBE_CONFIG != ''
-        run: scripts/helm-deploy.sh production "${IMAGE_NAME}:${GITHUB_REF_NAME#v}"
+  deploy-production:
+    name: Deploy production
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [publish, release]
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      image: ghcr.io/${{ github.repository }}:${{ needs.publish.outputs.tag }}
+    secrets: inherit

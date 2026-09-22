@@ -9,9 +9,20 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: curl
       image: curlimages/curl:8.11.1
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
       command: ["sh", "-c"]
       args:
-        - test "$(curl -fs 'http://{{ include "first-app.fullname" . }}:{{ .Values.service.port }}/hello?name=Helm')" = "Hello, Helm!"
+        - test "$(curl -fsS 'http://{{ include "first-app.fullname" . }}:{{ .Values.service.port }}/hello?name=Helm')" = "Hello, Helm!"

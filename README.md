@@ -1,73 +1,123 @@
 # first-app
 
-Petite application Java 21 (serveur HTTP sans dépendance) avec une chaîne CI/CD complète sur GitHub Actions.
+Petite application Java 21 (serveur HTTP sans dépendance) livrée par une chaîne CI/CD complète :
+tests, image Docker, analyse de sécurité, déploiement Kubernetes via Helm.
 
-## Endpoints
+## Application
 
 | Route | Réponse |
 |-------|---------|
-| `GET /health` | `OK` |
+| `GET /health` | `OK` (sondes Kubernetes) |
 | `GET /hello?name=Alice` | `Hello, Alice!` |
+| autre méthode que `GET` | `405 Method Not Allowed` |
 
-## En local
+- Threads virtuels (Java 21) pour traiter les requêtes.
+- Arrêt propre sur `SIGTERM` : les requêtes en cours se terminent avant l'arrêt.
+- Port configurable par la variable d'environnement `PORT` (8080 par défaut).
+
+## Développement
 
 ```bash
-./mvnw verify                 # compile + tests + packaging
+./mvnw verify                  # build complet avec toutes les vérifications (voir ci-dessous)
+./mvnw spotless:apply          # reformate le code
 java -jar target/first-app.jar
-curl "localhost:8080/hello?name=Alice"
 
 docker build -t first-app .
 docker run -p 8080:8080 first-app
 ```
 
-Le port est configurable via la variable d'environnement `PORT`.
+Contrôles exécutés par `./mvnw verify`, en local comme en CI :
 
-## Pipeline CI/CD (`.github/workflows/ci-cd.yml`)
+| Contrôle | Outil |
+|----------|-------|
+| Versions de Java/Maven et des plugins | maven-enforcer |
+| Formatage du code et du `pom.xml` | Spotless (palantir-java-format) |
+| Compilation sans aucun avertissement | `-Xlint:all -Werror` |
+| Tests unitaires (`*Test.java`) | Surefire + JUnit 5 |
+| Tests d'intégration (`*IT.java`, serveur HTTP réel) | Failsafe |
+| Couverture de lignes ≥ 80 % | JaCoCo |
 
-| Étape | Quand | Quoi |
-|-------|-------|------|
-| **Build & Test** | chaque push / PR | `mvn verify` (tests JUnit 5), JAR et rapports publiés en artefacts |
-| **Docker image** | chaque push / PR | build de l'image + smoke test du conteneur ; push sur `ghcr.io/<owner>/first-app` hors PR |
-| **Kubernetes (kind)** | chaque push / PR | `helm lint`, puis déploiement Kustomize **et** Helm sur un cluster kind éphémère, avec test du service (`helm test`) |
-| **Deploy staging** | push sur la branche par défaut (`feat/1.0`) | déploie via Helm l'image `sha-xxxxxxx` dans le namespace `first-app-staging` |
-| **Release & deploy production** | tag `v*` | release GitHub avec le JAR + déploiement Helm de l'image `X.Y.Z` dans `first-app-production` |
+Le build est reproductible : deux builds du même commit produisent un JAR identique à l'octet près.
 
-Pour déployer une version :
+## Architecture de livraison
 
-```bash
-git tag v1.0.0 && git push origin v1.0.0
+```mermaid
+flowchart LR
+    subgraph CI["CI : chaque push / PR"]
+        B[Build & Test<br/>mvn verify] --> I[Image Docker<br/>construite 1 fois]
+        C[Chart Helm<br/>lint + kubeconform]
+        I --> S[Smoke test<br/>+ scan Grype]
+        S --> K[Test Kubernetes<br/>kind + helm test]
+        C --> K
+        Q[CodeQL]
+    end
+    subgraph CD["CD : hors PR"]
+        K --> P[Publication GHCR<br/>+ attestation SLSA]
+        P -->|branche par défaut| ST[Staging]
+        P -->|tag vX.Y.Z| R[Release GitHub] --> PR[Production<br/>validation manuelle]
+    end
 ```
 
-L'image est alors publiée avec les tags `1.0.0`, `sha-xxxx`, et `latest` pour la branche par défaut.
+Principes appliqués :
 
-## Kubernetes
+- **Construire une fois, déployer partout** : l'image est construite une seule fois. Ce même binaire est testé, scanné, poussé sur GHCR puis déployé en staging et en production.
+- **Tags immuables** : on déploie `sha-xxxxxxx` (staging) ou `X.Y.Z` (production), jamais `latest`.
+- **Chaîne d'approvisionnement** : actions GitHub et images de base épinglées par empreinte (SHA / digest), mises à jour par Dependabot. L'image publiée porte une attestation de provenance (vérifiable avec `gh attestation verify oci://ghcr.io/thepja/first-app:X.Y.Z --owner thepja`).
+- **Sécurité** : CodeQL sur le code, Grype sur l'image (échec si une vulnérabilité haute ou critique corrigeable est trouvée), conteneur non-root en lecture seule, permissions GitHub minimales par job.
+- **Déploiements sûrs** : `helm upgrade --atomic` (rollback automatique si les pods ne démarrent pas), mise à jour progressive sans interruption, `helm test` après chaque déploiement, un seul déploiement à la fois par environnement.
 
-Deux façons de déployer, qui produisent les mêmes ressources :
+### Workflows
 
-- **Helm** (`helm/first-app/`) : utilisé par la CI pour les déploiements (historique des releases, rollback automatique en cas d'échec grâce à `--atomic`).
-- **Kustomize** (`k8s/`) : alternative sans outil supplémentaire, testée aussi en CI.
+| Fichier | Rôle |
+|---------|------|
+| `.github/workflows/ci-cd.yml` | pipeline principal (schéma ci-dessus) |
+| `.github/workflows/deploy.yml` | workflow réutilisable de déploiement Helm, appelé pour staging et production |
+| `.github/workflows/codeql.yml` | analyse de sécurité du code (à chaque push/PR et chaque semaine) |
+| `.github/dependabot.yml` | mises à jour hebdomadaires : Maven, actions GitHub, images Docker |
 
-⚠️ N'utilisez pas les deux sur le même namespace : Helm refusera de reprendre des ressources créées par Kustomize.
+### Versions
 
-### Helm
+La version vient du tag git : `v1.2.3` donne un JAR `1.2.3` et une image `ghcr.io/thepja/first-app:1.2.3` (plus `1.2`).
+Hors tag, la version est `0.0.0-<sha>`.
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0     # release + déploiement production
+```
+
+## Kubernetes (Helm)
 
 ```
 helm/first-app/
 ├── Chart.yaml
-├── values.yaml              # valeurs par défaut (image, ressources, ingress désactivé…)
+├── values.yaml              # valeurs par défaut
+├── values.schema.json       # validation des valeurs (erreur explicite si une valeur est invalide)
 ├── values-staging.yaml      # 1 réplica
-├── values-production.yaml   # 3 réplicas
-└── templates/               # Deployment, Service, Ingress (optionnel), test helm
+├── values-production.yaml   # autoscaling 3-10, PDB, NetworkPolicy, répartition sur les nœuds
+└── templates/               # Deployment, Service, ServiceAccount, Ingress, HPA, PDB, NetworkPolicy, test
 ```
+
+Ce que le chart met en place :
+
+| Aspect | Mise en œuvre |
+|--------|---------------|
+| Sondes | `startupProbe`, `readinessProbe`, `livenessProbe` sur `/health` |
+| Mise à jour | `RollingUpdate` avec `maxUnavailable: 0` |
+| Arrêt | `preStop` de 5 s (le temps que le Service retire le pod), puis `SIGTERM` et arrêt propre de la JVM |
+| Sécurité | non-root, système de fichiers en lecture seule, aucune capability, seccomp `RuntimeDefault`, pas de jeton d'API monté |
+| Disponibilité (prod) | HPA, PodDisruptionBudget, `topologySpreadConstraints` |
+| Réseau (prod) | NetworkPolicy : seul le port HTTP accepte du trafic entrant |
+| Mémoire JVM | `-XX:MaxRAMPercentage=75` : le tas s'adapte à la limite du conteneur |
+
+Déploiement manuel :
 
 ```bash
-scripts/helm-deploy.sh staging ghcr.io/thepja/first-app:latest
+scripts/helm-deploy.sh staging ghcr.io/thepja/first-app:sha-abc1234
 helm test first-app -n first-app-staging
 helm history first-app -n first-app-staging
-helm rollback first-app -n first-app-staging     # retour à la version précédente
+helm rollback first-app -n first-app-staging
 ```
 
-Pour exposer l'application, activer l'ingress dans le fichier de valeurs :
+Exposer l'application : activer l'ingress dans le fichier de valeurs de l'environnement.
 
 ```yaml
 ingress:
@@ -76,33 +126,16 @@ ingress:
   hosts:
     - host: first-app.mondomaine.fr
       paths: [{ path: /, pathType: Prefix }]
+networkPolicy:
+  from:
+    - namespaceSelector:
+        matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
 ```
 
-### Kustomize
+## Configuration GitHub à faire une fois
 
-Manifests dans `k8s/` :
-
-```
-k8s/
-├── base/                  # Deployment (probes /health, non-root, limites) + Service
-└── overlays/
-    ├── staging/           # namespace first-app-staging, 1 réplica
-    └── production/        # namespace first-app-production, 3 réplicas
-```
-
-Déploiement manuel avec Kustomize :
-
-```bash
-scripts/k8s-deploy.sh staging ghcr.io/thepja/first-app:latest
-kubectl -n first-app-staging port-forward svc/first-app 8080:80
-```
-
-### Brancher un vrai cluster
-
-1. Dans *Settings → Environments*, créer les environnements `staging` et `production`
-   (on peut ajouter une validation manuelle sur `production`).
-2. Dans chacun, ajouter le secret `KUBE_CONFIG` : le kubeconfig encodé en base64
-   (`base64 -w0 ~/.kube/config`). Sans ce secret, l'étape de déploiement est ignorée avec un avertissement.
-3. L'image GHCR est privée par défaut : soit la rendre publique
-   (*Packages → first-app → Package settings*), soit créer un secret de pull dans chaque namespace
-   et le référencer (`imagePullSecrets` dans `values.yaml` pour Helm, ou dans le Deployment pour Kustomize).
+1. **Environnements** (*Settings → Environments*) : créer `staging` et `production`.
+   - Dans chacun, ajouter le secret `KUBE_CONFIG` : le kubeconfig encodé en base64 (`base64 -w0 kubeconfig`), idéalement celui d'un ServiceAccount limité au namespace `first-app-<env>`. Sans ce secret, le déploiement est ignoré avec un avertissement.
+   - Sur `production` : activer *Required reviewers* (validation manuelle) et limiter les déploiements aux tags `v*`.
+2. **Image GHCR** : la rendre publique (*Packages → first-app → Package settings*) ou créer un secret de pull dans chaque namespace et le référencer dans `imagePullSecrets`.
+3. **Protection de branche** sur la branche par défaut : exiger une PR et le succès des jobs *Build & Test*, *Helm chart*, *Docker image*, *Kubernetes (kind)* et *CodeQL*.

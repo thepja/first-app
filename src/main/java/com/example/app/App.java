@@ -1,35 +1,66 @@
 package com.example.app;
 
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-public class App {
+/** Serveur HTTP minimal exposant {@code /hello} et {@code /health}. */
+public final class App {
+
+    private static final Logger LOG = System.getLogger(App.class.getName());
+    private static final int SHUTDOWN_GRACE_SECONDS = 5;
 
     private final HttpServer server;
+    private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
     private final Greeter greeter = new Greeter();
 
     public App(int port) throws IOException {
         server = HttpServer.create(new InetSocketAddress(port), 0);
-        server.createContext("/health", ex -> respond(ex, 200, "OK"));
-        server.createContext("/hello", ex -> respond(ex, 200, greeter.greet(queryParam(ex, "name"))));
+        server.setExecutor(executor);
+        server.createContext("/health", getOnly(ex -> respond(ex, 200, "OK")));
+        server.createContext("/hello", getOnly(ex -> respond(ex, 200, greeter.greet(queryParam(ex, "name")))));
     }
 
     public void start() {
         server.start();
+        LOG.log(Level.INFO, "Server started on port " + port());
     }
 
+    /** Arrête d'accepter les connexions puis laisse les requêtes en cours se terminer. */
     public void stop() {
-        server.stop(0);
+        server.stop(SHUTDOWN_GRACE_SECONDS);
+        executor.close();
     }
 
     public int port() {
         return server.getAddress().getPort();
+    }
+
+    private static HttpHandler getOnly(HttpHandler handler) {
+        return ex -> {
+            try {
+                if (!"GET".equals(ex.getRequestMethod())) {
+                    ex.getResponseHeaders().set("Allow", "GET");
+                    respond(ex, 405, "Method Not Allowed");
+                    return;
+                }
+                handler.handle(ex);
+            } catch (RuntimeException e) {
+                LOG.log(Level.ERROR, "Unhandled error on " + ex.getRequestURI(), e);
+                respond(ex, 500, "Internal Server Error");
+            } finally {
+                ex.close();
+            }
+        };
     }
 
     static String queryParam(HttpExchange ex, String key) {
@@ -58,7 +89,8 @@ public class App {
     public static void main(String[] args) throws IOException {
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
         App app = new App(port);
+        // SIGTERM (arrêt du pod) : arrêt propre. Pas de log ici, JUL se réinitialise dans son propre hook.
+        Runtime.getRuntime().addShutdownHook(new Thread(app::stop, "shutdown"));
         app.start();
-        System.out.println("Server started on port " + app.port());
     }
 }
