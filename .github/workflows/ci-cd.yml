@@ -2,7 +2,7 @@ name: CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feat/**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -164,11 +164,11 @@ jobs:
           kubectl -n first-app-staging describe pods
           kubectl -n first-app-staging logs -l app=first-app --tail=100
 
-  # 4. Déploiement staging : chaque push sur main
+  # 4. Déploiement staging : chaque push sur la branche par défaut du dépôt
   # Le déploiement se fait avec le chart Helm (historique + rollback automatique)
   deploy-staging:
     name: Deploy staging
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
     needs: [docker, k8s-test]
     runs-on: ubuntu-latest
     environment: staging
