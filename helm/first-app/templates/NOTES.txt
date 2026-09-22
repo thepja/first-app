@@ -1,0 +1,10 @@
+{{- if .Values.ingress.enabled }}
+Application disponible sur :
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}/hello
+{{- end }}
+{{- else }}
+Pour accéder à l'application :
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "first-app.fullname" . }} 8080:{{ .Values.service.port }}
+  curl "http://localhost:8080/hello?name=Helm"
+{{- end }}

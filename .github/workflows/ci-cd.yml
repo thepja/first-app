@@ -104,7 +104,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  # 3. Test des manifests Kubernetes sur un cluster éphémère (kind)
+  # 3. Test des manifests Kustomize et du chart Helm sur un cluster éphémère (kind)
   k8s-test:
     name: Kubernetes (kind)
     needs: build
@@ -112,10 +112,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Vérifier que les overlays se construisent
+      - uses: azure/setup-helm@v4
+
+      - name: Vérifier les overlays et le chart
         run: |
           kubectl kustomize k8s/overlays/staging > /dev/null
           kubectl kustomize k8s/overlays/production > /dev/null
+          helm lint helm/first-app -f helm/first-app/values-staging.yaml
+          helm lint helm/first-app -f helm/first-app/values-production.yaml
 
       - uses: docker/setup-buildx-action@v3
 
@@ -132,16 +136,26 @@ jobs:
         with:
           cluster_name: first-app
 
-      - name: Déployer sur kind
-        run: |
-          kind load docker-image first-app:ci --name first-app
-          scripts/k8s-deploy.sh staging first-app:ci
+      - name: Charger l'image dans kind
+        run: kind load docker-image first-app:ci --name first-app
 
-      - name: Tester le service
+      - name: Déployer avec Kustomize
+        run: scripts/k8s-deploy.sh staging first-app:ci
+
+      - name: Tester le service (Kustomize)
         run: |
           kubectl -n first-app-staging port-forward svc/first-app 8080:80 &
+          pf=$!
           sleep 3
           test "$(curl -fs 'http://localhost:8080/hello?name=Kube')" = "Hello, Kube!"
+          kill $pf
+          kubectl delete namespace first-app-staging --wait
+
+      - name: Déployer avec Helm
+        run: scripts/helm-deploy.sh staging first-app:ci
+
+      - name: Tester le service (helm test)
+        run: helm test first-app -n first-app-staging --logs
 
       - name: Diagnostic en cas d'échec
         if: failure()
@@ -151,6 +165,7 @@ jobs:
           kubectl -n first-app-staging logs -l app=first-app --tail=100
 
   # 4. Déploiement staging : chaque push sur main
+  # Le déploiement se fait avec le chart Helm (historique + rollback automatique)
   deploy-staging:
     name: Deploy staging
     if: github.ref == 'refs/heads/main'
@@ -161,6 +176,8 @@ jobs:
       KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
 
       - name: Secret KUBE_CONFIG absent
         if: env.KUBE_CONFIG == ''
@@ -175,7 +192,7 @@ jobs:
 
       - name: Déployer
         if: env.KUBE_CONFIG != ''
-        run: scripts/k8s-deploy.sh staging "${IMAGE_NAME}:sha-${GITHUB_SHA::7}"
+        run: scripts/helm-deploy.sh staging "${IMAGE_NAME}:sha-${GITHUB_SHA::7}"
 
   # 5. Release + déploiement production : tags v*
   release:
@@ -190,6 +207,8 @@ jobs:
       KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
 
       - uses: actions/download-artifact@v4
         with:
@@ -214,4 +233,4 @@ jobs:
 
       - name: Déployer
         if: env.KUBE_CONFIG != ''
-        run: scripts/k8s-deploy.sh production "${IMAGE_NAME}:${GITHUB_REF_NAME#v}"
+        run: scripts/helm-deploy.sh production "${IMAGE_NAME}:${GITHUB_REF_NAME#v}"
