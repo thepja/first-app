@@ -1,52 +1,75 @@
-# first-app
+# first-app — Mes lectures
 
-Petite application Java 21 (serveur HTTP sans dépendance) avec un front-end Angular, livrée par une chaîne CI/CD complète :
+Carnet de lectures en ligne : on crée un compte, on se connecte, et on note les livres lus (note de 1 à 5 étoiles,
+date de lecture, commentaire). Spring Boot 4 + Angular 22 + PostgreSQL 17, livré par une chaîne CI/CD complète :
 tests, image Docker, analyse de sécurité, déploiement sur Render et Kubernetes via Helm.
 
-## Application
+## Architecture
 
-| Route | Réponse |
-|-------|---------|
-| `GET /` | interface Angular (fichiers statiques embarqués dans le JAR) |
-| `GET /health` | `OK` (sondes Kubernetes) |
-| `GET /hello?name=Alice` | `Hello, Alice!` |
-| `GET /version` | version déployée (ex. `1.2.3`) |
-| autre méthode que `GET` | `405 Method Not Allowed` |
-| chemin inconnu | `404 Not Found` |
-
-- Threads virtuels (Java 21) pour traiter les requêtes.
-- Arrêt propre sur `SIGTERM` : les requêtes en cours se terminent avant l'arrêt.
-- Port configurable par la variable d'environnement `PORT` (8080 par défaut).
-
-## Front-end (Angular)
-
-L'interface (`frontend/`, Angular 22, composants standalone, signals, tests Vitest) permet de saisir un prénom
-et d'appeler `/hello`, et affiche l'état du serveur (`/health`) et la version déployée (`/version`).
-
-Elle est servie par le serveur Java, sur la même origine que l'API (pas de CORS) : le build Angular est copié
-dans le JAR (`static/`) lors de la construction de l'image Docker. `index.html` n'est jamais mis en cache,
-les fichiers à empreinte (`main-XXXX.js`) le sont pour un an.
-
-```bash
-cd frontend
-npm ci
-npm start              # http://localhost:4200, les appels API sont relayés vers le serveur Java sur :8080
-npx ng test            # tests unitaires (Vitest)
-npx ng build           # build de production dans dist/frontend/browser
+```
+navigateur ──► Spring Boot (un seul service, même origine : pas de CORS)
+                 ├─ /            front-end Angular (fichiers statiques embarqués dans le JAR)
+                 ├─ /api/auth/*  inscription, connexion, déconnexion, utilisateur courant
+                 ├─ /api/books   livres de l'utilisateur connecté
+                 └─ /health      sondes (liveness / readiness)
+                        │
+                        ▼
+                   PostgreSQL  (schéma versionné par Flyway, sessions stockées en base)
 ```
 
-Node.js 24 (≥ 24.15) est requis.
+| Couche | Choix |
+|--------|-------|
+| API | Spring Boot 4.1 (Spring MVC, threads virtuels), erreurs au format ProblemDetail (RFC 9457) |
+| Données | PostgreSQL 17, Spring Data JPA / Hibernate 7, migrations Flyway (`src/main/resources/db/migration`) |
+| Sessions | Spring Session JDBC : les connexions survivent aux redémarrages et aux mises en veille |
+| Front-end | Angular 22 : composants standalone, signals, routes chargées à la demande, tests Vitest |
+
+### API
+
+| Route | Rôle |
+|-------|------|
+| `POST /api/auth/register` | crée un compte (`email`, `password` ≥ 8 caractères, `displayName`) et connecte |
+| `POST /api/auth/login` | connexion (`email`, `password`) |
+| `POST /api/auth/logout` | déconnexion |
+| `GET /api/auth/me` | utilisateur connecté (401 sinon) |
+| `GET /api/books` | mes livres, lectures les plus récentes d'abord |
+| `POST /api/books` | ajoute un livre (`title`, `author`, `readOn`, `rating` 1-5, `comment`) |
+| `PUT /api/books/{id}` | modifie un livre |
+| `DELETE /api/books/{id}` | supprime un livre |
+| `GET /health`, `/health/liveness`, `/health/readiness` | état de l'application (readiness inclut la base) |
+| `GET /version`, `GET /hello?name=…` | version déployée, route de test (utilisées par la CI) |
+
+### Sécurité
+
+- **Session serveur** dans un cookie `HttpOnly`, `Secure`, `SameSite=Lax` : aucun jeton lisible par JavaScript.
+- **CSRF** : cookie `XSRF-TOKEN` renvoyé par Angular dans l'en-tête `X-XSRF-TOKEN` (mode SPA de Spring Security).
+- **Mots de passe** hachés (bcrypt) ; ≥ 8 caractères, sans règle de composition (recommandations NIST 800-63B).
+- **À la connexion**, nouvel identifiant de session et nouveau jeton CSRF (fixation de session).
+- **Force brute** : 5 échecs en 15 minutes bloquent le compte pour 15 minutes ; même message d'erreur que l'adresse
+  existe ou non.
+- **Isolation** : chaque requête est limitée aux livres de l'utilisateur ; ceux des autres répondent 404.
+- **En-têtes** : Content-Security-Policy stricte, `X-Frame-Options`, `X-Content-Type-Options`.
 
 ## Développement
 
-```bash
-./mvnw verify                  # build complet avec toutes les vérifications (voir ci-dessous)
-./mvnw spotless:apply          # reformate le code
-java -jar target/first-app.jar
+Prérequis : Java 21 et Node.js 24 (≥ 24.15). **Ni Docker ni PostgreSQL à installer** : un vrai PostgreSQL est
+téléchargé et lancé automatiquement (bibliothèque zonky embedded-postgres).
 
-docker build -t first-app .
-docker run -p 8080:8080 first-app
+```bash
+scripts/dev.sh          # API + base sur :8080, Angular sur http://localhost:4200 (rechargement à chaud)
 ```
+
+Les données de développement sont conservées dans `.dev-db/` ; supprimez ce dossier pour repartir de zéro.
+Pour lancer seulement l'API : `./mvnw spring-boot:test-run -Dspring-boot.run.main-class=com.example.app.DevApplication`.
+
+```bash
+./mvnw verify                  # build complet : tests unitaires + intégration (PostgreSQL embarqué), couverture…
+./mvnw spotless:apply          # reformate le code Java
+cd frontend && npx ng test     # tests Angular
+```
+
+Nouvelle évolution du schéma : ajouter un fichier `V3__description.sql` dans `db/migration` (ne jamais modifier une
+migration déjà déployée).
 
 Contrôles exécutés par `./mvnw verify`, en local comme en CI :
 
@@ -55,8 +78,8 @@ Contrôles exécutés par `./mvnw verify`, en local comme en CI :
 | Versions de Java/Maven et des plugins | maven-enforcer |
 | Formatage du code et du `pom.xml` | Spotless (palantir-java-format) |
 | Compilation sans aucun avertissement | `-Xlint:all -Werror` |
-| Tests unitaires (`*Test.java`) | Surefire + JUnit 5 |
-| Tests d'intégration (`*IT.java`, serveur HTTP réel) | Failsafe |
+| Tests unitaires (`*Test.java`) | Surefire + JUnit 6 |
+| Tests d'intégration (`*IT.java` : application complète, PostgreSQL réel, parcours navigateur) | Failsafe |
 | Couverture de lignes ≥ 80 % | JaCoCo |
 
 Le build est reproductible : deux builds du même commit produisent un JAR identique à l'octet près.
@@ -128,6 +151,7 @@ Ce que le chart met en place :
 | Sondes | `startupProbe`, `readinessProbe`, `livenessProbe` sur `/health` |
 | Mise à jour | `RollingUpdate` avec `maxUnavailable: 0` |
 | Arrêt | `preStop` de 5 s (le temps que le Service retire le pod), puis `SIGTERM` et arrêt propre de la JVM |
+| Base de données | Secret `first-app-db` (clés `url`, `username`, `password`) à créer dans chaque namespace, hors du chart |
 | Sécurité | non-root, système de fichiers en lecture seule, aucune capability, seccomp `RuntimeDefault`, pas de jeton d'API monté |
 | Disponibilité (prod) | HPA, PodDisruptionBudget, `topologySpreadConstraints` |
 | Réseau (prod) | NetworkPolicy : seul le port HTTP accepte du trafic entrant |
@@ -177,7 +201,12 @@ Mise en place (une fois) :
    - le secret `RENDER_DEPLOY_HOOK_URL` : *Render → first-app → Settings → Deploy Hook* ;
    - la variable `RENDER_SERVICE_URL` : l'URL publique du service (ex. `https://first-app-xxxx.onrender.com`).
 
+4. **Base de données** : base PostgreSQL 17 `first-app-db` (même région), reliée par les variables
+   `SPRING_DATASOURCE_URL` (`jdbc:postgresql://<hôte interne>:5432/<base>`), `SPRING_DATASOURCE_USERNAME` et
+   `SPRING_DATASOURCE_PASSWORD` du service.
+
 Sur le plan gratuit, le service se met en veille après 15 minutes sans trafic ; la première requête suivante prend alors environ une minute.
+La base gratuite est **supprimée par Render au bout de 30 jours** : passez-la sur un plan payant pour conserver les données.
 
 ## Configuration GitHub à faire une fois
 

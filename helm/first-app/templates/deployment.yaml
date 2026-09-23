@@ -48,24 +48,34 @@ spec:
           env:
             - name: PORT
               value: "8080"
+            {{- $dbSecret := required "database.existingSecret : nom du Secret de connexion PostgreSQL (clés url, username, password)" .Values.database.existingSecret }}
+            {{- range $var, $key := dict "SPRING_DATASOURCE_URL" "url" "SPRING_DATASOURCE_USERNAME" "username" "SPRING_DATASOURCE_PASSWORD" "password" }}
+            - name: {{ $var }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $dbSecret }}
+                  key: {{ $key }}
+            {{- end }}
             {{- range $key, $value := .Values.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+          # Sondes Spring Boot : la disponibilité (readiness) inclut la base, la vivacité (liveness) non,
+          # pour ne pas redémarrer les pods quand PostgreSQL est momentanément indisponible
           startupProbe:
             httpGet:
-              path: /health
+              path: /health/liveness
               port: http
             periodSeconds: 2
-            failureThreshold: 30
+            failureThreshold: 60
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/readiness
               port: http
             periodSeconds: 5
           livenessProbe:
             httpGet:
-              path: /health
+              path: /health/liveness
               port: http
             periodSeconds: 10
             failureThreshold: 3

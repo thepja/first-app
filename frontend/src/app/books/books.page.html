@@ -1,0 +1,92 @@
+<div class="heading">
+  <div>
+    <h1>Mes lectures</h1>
+    @if (books().length) {
+      <p class="summary">
+        {{ books().length }} livre{{ books().length > 1 ? 's' : '' }} · note moyenne {{ average() | number: '1.1-1' : 'fr' }} / 5
+      </p>
+    }
+  </div>
+  @if (editing() === null) {
+    <button type="button" class="primary" (click)="add()">Ajouter un livre</button>
+  }
+</div>
+
+@if (editing() !== null) {
+  <form class="card" [formGroup]="form" (ngSubmit)="save()" novalidate>
+    <h2>{{ editing() === 'new' ? 'Nouveau livre' : 'Modifier le livre' }}</h2>
+    <div class="grid">
+      <div class="field wide">
+        <label for="title">Titre</label>
+        <input id="title" type="text" formControlName="title" maxlength="200" />
+      </div>
+      <div class="field">
+        <label for="author">Auteur <span class="optional">(facultatif)</span></label>
+        <input id="author" type="text" formControlName="author" maxlength="200" />
+      </div>
+      <div class="field">
+        <label for="readOn">Lu le <span class="optional">(facultatif)</span></label>
+        <input id="readOn" type="date" formControlName="readOn" [max]="today" />
+      </div>
+      <div class="field wide">
+        <span class="label">Note</span>
+        <app-star-rating formControlName="rating" label="Note sur 5" />
+      </div>
+      <div class="field wide">
+        <label for="comment">Commentaire <span class="optional">(facultatif)</span></label>
+        <textarea id="comment" rows="4" formControlName="comment" maxlength="5000"></textarea>
+      </div>
+    </div>
+    @if (formError(); as message) {
+      <p class="error" role="alert">{{ message }}</p>
+    }
+    <div class="actions">
+      <button type="button" class="secondary" (click)="cancel()">Annuler</button>
+      <button type="submit" class="primary" [disabled]="saving()">Enregistrer</button>
+    </div>
+  </form>
+}
+
+@if (error(); as message) {
+  <p class="error" role="alert">{{ message }}</p>
+}
+
+@if (loading()) {
+  <p class="muted">Chargement…</p>
+} @else if (!books().length && editing() === null) {
+  <div class="card empty">
+    <p>Vous n'avez encore ajouté aucun livre.</p>
+    <p class="muted">Notez vos lectures pour garder une trace de ce que vous avez aimé.</p>
+  </div>
+} @else {
+  <ul class="books">
+    @for (book of books(); track book.id) {
+      <li class="card book">
+        <div class="book-head">
+          <div>
+            <h3>{{ book.title }}</h3>
+            <p class="meta">
+              @if (book.author) {
+                {{ book.author }}
+              }
+              @if (book.author && book.readOn) {
+                ·
+              }
+              @if (book.readOn) {
+                lu le {{ book.readOn | date: 'longDate' : undefined : 'fr' }}
+              }
+            </p>
+          </div>
+          <app-star-rating [readonly]="true" [rating]="book.rating" />
+        </div>
+        @if (book.comment) {
+          <p class="comment">{{ book.comment }}</p>
+        }
+        <div class="book-actions">
+          <button type="button" class="link" (click)="edit(book)">Modifier</button>
+          <button type="button" class="link danger" (click)="remove(book)">Supprimer</button>
+        </div>
+      </li>
+    }
+  </ul>
+}

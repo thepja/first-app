@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: first-app
+  # Connexion : SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate # le schéma est géré par Flyway (src/main/resources/db/migration)
+  session:
+    jdbc:
+      initialize-schema: never # tables créées par Flyway (V2)
+  mvc:
+    problemdetails:
+      enabled: true # erreurs au format RFC 9457
+  threads:
+    virtual:
+      enabled: true
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          no-cache: true # index.html ; les bundles à empreinte sont gérés dans WebConfig
+
+server:
+  port: ${PORT:8080}
+  forward-headers-strategy: framework # derrière le proxy TLS de Render / de l'ingress
+  servlet:
+    session:
+      timeout: 7d
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${SESSION_COOKIE_SECURE:true}
+
+management:
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true # /health/liveness et /health/readiness pour Kubernetes

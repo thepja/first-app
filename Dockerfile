@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/root/.m2 \
       version="0.0.0-$(echo "$RENDER_GIT_COMMIT" | cut -c1-7)"; \
     fi; \
     ./mvnw -B -q package -Drevision="${version:-0.0.0-SNAPSHOT}" \
-      -DskipTests -Djacoco.skip=true -Dspotless.check.skip=true
+      -Dmaven.test.skip=true -Djacoco.skip=true -Dspotless.check.skip=true
 
 FROM eclipse-temurin:21-jre-noble@sha256:7739f0ffce786528961eea6bf46d9610ee968ac6127c9b2e93494757bdecce9f
 WORKDIR /app
@@ -36,4 +36,5 @@ COPY --from=build /build/target/first-app.jar app.jar
 EXPOSE 8080
 # Utilisateur non-root (uid 1000 = « ubuntu » dans l'image de base)
 USER 1000:1000
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]
+# Tas limité à 60 % de la mémoire du conteneur : le reste pour la pile, le code et les buffers de la JVM
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=60", "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]

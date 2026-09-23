@@ -1,0 +1,66 @@
+.heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 8px 0 24px;
+}
+.summary {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.wide {
+  grid-column: 1 / -1;
+}
+@media (max-width: 560px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+.optional {
+  font-weight: 400;
+  color: var(--muted);
+}
+.actions,
+.book-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.books {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.book-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.book h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.meta {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.comment {
+  margin: 12px 0 0;
+  white-space: pre-line;
+}
+.book-actions {
+  margin-top: 8px;
+}
+.empty {
+  text-align: center;
+}

@@ -62,12 +62,17 @@ ingress:
           pathType: Prefix
   tls: []
 
+# Base PostgreSQL : Secret existant avec les clés url (jdbc:postgresql://hôte:5432/base), username et password.
+# Le Secret est créé en dehors du chart (kubectl, External Secrets, Sealed Secrets…).
+database:
+  existingSecret: first-app-db
+
 resources:
   requests:
-    cpu: 50m
-    memory: 128Mi
+    cpu: 100m
+    memory: 384Mi
   limits:
-    memory: 256Mi
+    memory: 512Mi
 
 autoscaling:
   enabled: false

@@ -1,6 +1,6 @@
 apiVersion: v2
 name: first-app
-description: Petite application Java HTTP (Hello / health)
+description: Carnet de lectures (Spring Boot + Angular + PostgreSQL)
 type: application
-version: 0.2.0
+version: 0.3.0
 appVersion: "1.0.0"

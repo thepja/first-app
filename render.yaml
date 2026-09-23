@@ -12,6 +12,23 @@ services:
     dockerContext: .
     plan: free
     region: oregon
-    healthCheckPath: /health
+    healthCheckPath: /health/readiness
     autoDeployTrigger: "off"
     # Render fournit la variable PORT, lue par l'application
+    envVars:
+      - key: SPRING_DATASOURCE_URL
+        sync: false
+      - key: SPRING_DATASOURCE_USERNAME
+        fromDatabase:
+          name: first-app-db
+          property: user
+      - key: SPRING_DATASOURCE_PASSWORD
+        fromDatabase:
+          name: first-app-db
+          property: password
+
+databases:
+  - name: first-app-db
+    plan: free
+    region: oregon
+    postgresMajorVersion: "17"

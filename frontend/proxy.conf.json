@@ -1,4 +1,5 @@
 {
+  "/api": { "target": "http://localhost:8080", "secure": false },
   "/hello": { "target": "http://localhost:8080", "secure": false },
   "/version": { "target": "http://localhost:8080", "secure": false },
   "/health": { "target": "http://localhost:8080", "secure": false }

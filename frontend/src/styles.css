@@ -5,7 +5,7 @@
   --muted: #65676b;
   --border: #ccd0d5;
   --accent: #2f5bea;
-  --ok: #2e9e5b;
+  --star: #e8a317;
   --danger: #d93025;
   color-scheme: light dark;
 }
@@ -18,6 +18,7 @@
     --muted: #b0b3b8;
     --border: #3e4042;
     --accent: #5b82f5;
+    --danger: #f28b82;
   }
 }
 
@@ -25,6 +26,124 @@ html,
 body {
   margin: 0;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
   background: var(--bg);
   color: var(--text);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+h2 {
+  margin: 0 0 16px;
+  font-size: 1.2rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+.card {
+  padding: 24px;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 6px rgb(0 0 0 / 8%);
+  margin-bottom: 24px;
+}
+.card.narrow {
+  max-width: 400px;
+  margin: 32px auto;
+}
+.card.narrow h1 {
+  margin-bottom: 16px;
+}
+.card.book {
+  margin-bottom: 0;
+  padding: 20px;
+}
+
+label,
+.label {
+  display: block;
+  margin: 12px 0 6px;
+  font-weight: 600;
+}
+.field label,
+.field .label {
+  margin-top: 0;
+}
+
+input:not([type='radio']),
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  background: transparent;
+  color: inherit;
+}
+input:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button {
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.primary {
+  color: #fff;
+  background: var(--accent);
+}
+button.secondary {
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border);
+}
+button.link {
+  padding: 4px 6px;
+  color: var(--accent);
+  background: transparent;
+  font-weight: 500;
+}
+button.link.danger {
+  color: var(--danger);
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+form > button.primary {
+  width: 100%;
+  margin-top: 20px;
+}
+
+.error {
+  margin: 16px 0 0;
+  color: var(--danger);
+}
+.hint,
+.muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  border: 0;
 }
