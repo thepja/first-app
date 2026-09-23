@@ -62,10 +62,30 @@ class AppIT {
     }
 
     @Test
-    void rootListsRoutes() throws Exception {
+    void rootServesFrontend() throws Exception {
         HttpResponse<String> response = get("/");
         assertEquals(200, response.statusCode());
-        assertTrue(response.body().contains("/hello"));
+        assertTrue(response.body().contains("<app-root>"));
+        assertEquals(
+                "text/html; charset=utf-8",
+                response.headers().firstValue("Content-Type").orElseThrow());
+        assertEquals("no-cache", response.headers().firstValue("Cache-Control").orElseThrow());
+    }
+
+    @Test
+    void servesHashedAssetsWithLongCache() throws Exception {
+        HttpResponse<String> response = get("/main-TEST.js");
+        assertEquals(200, response.statusCode());
+        assertEquals(
+                "text/javascript; charset=utf-8",
+                response.headers().firstValue("Content-Type").orElseThrow());
+        assertTrue(response.headers().firstValue("Cache-Control").orElseThrow().contains("immutable"));
+    }
+
+    @Test
+    void refusesPathTraversal() throws Exception {
+        assertEquals(404, get("/../com/example/app/App.class").statusCode());
+        assertEquals(404, get("/%2e%2e/com/example/app/App.class").statusCode());
     }
 
     @Test

@@ -1,0 +1,39 @@
+<main class="card">
+  <header>
+    <h1>first-app</h1>
+    <p class="status" [class]="status()" role="status">
+      @switch (status()) {
+        @case ('up') { Serveur disponible }
+        @case ('down') { Serveur indisponible }
+        @default { Vérification du serveur… }
+      }
+    </p>
+  </header>
+
+  <form (ngSubmit)="greet()">
+    <label for="name">Votre prénom</label>
+    <div class="row">
+      <input
+        id="name"
+        name="name"
+        type="text"
+        autocomplete="given-name"
+        placeholder="Alice"
+        [ngModel]="name()"
+        (ngModelChange)="name.set($event)"
+      />
+      <button type="submit" [disabled]="sending()">Dire bonjour</button>
+    </div>
+  </form>
+
+  @if (greeting(); as message) {
+    <p class="greeting" aria-live="polite">{{ message }}</p>
+  }
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+
+  <footer>
+    Version {{ version() ?? 'inconnue' }}
+  </footer>
+</main>

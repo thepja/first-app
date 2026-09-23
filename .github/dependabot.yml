@@ -8,6 +8,17 @@ updates:
       maven:
         patterns: ['*']
 
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      angular:
+        patterns: ['@angular/*', '@angular-devkit/*', 'typescript', 'zone.js']
+      npm:
+        patterns: ['*']
+        exclude-patterns: ['@angular/*', '@angular-devkit/*', 'typescript', 'zone.js']
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

@@ -13,11 +13,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Serveur HTTP minimal exposant {@code /}, {@code /hello}, {@code /health} et {@code /version}. */
+/** Serveur HTTP minimal : API ({@code /hello}, {@code /health}, {@code /version}) et front-end Angular sur {@code /}. */
 public final class App {
 
     private static final Logger LOG = System.getLogger(App.class.getName());
     private static final int SHUTDOWN_GRACE_SECONDS = 5;
+    /** Page affichée à la racine quand aucun front-end n'est embarqué. */
     private static final String INDEX =
             """
             first-app
@@ -34,7 +35,12 @@ public final class App {
     public App(int port) throws IOException {
         server = HttpServer.create(new InetSocketAddress(port), 0);
         server.setExecutor(executor);
-        route("/", ex -> respond(ex, 200, INDEX));
+        StaticFiles staticFiles = new StaticFiles();
+        if (staticFiles.available()) {
+            server.createContext("/", getOnly(staticFiles));
+        } else {
+            route("/", ex -> respond(ex, 200, INDEX));
+        }
         route("/health", ex -> respond(ex, 200, "OK"));
         route("/version", ex -> respond(ex, 200, version()));
         route("/hello", ex -> respond(ex, 200, greeter.greet(queryParam(ex, "name"))));
@@ -66,10 +72,15 @@ public final class App {
         server.createContext(path, getOnly(path, handler));
     }
 
+    private static HttpHandler getOnly(HttpHandler handler) {
+        return getOnly(null, handler);
+    }
+
+    /** Restreint le handler aux requêtes GET, et au chemin exact {@code path} s'il est fourni. */
     private static HttpHandler getOnly(String path, HttpHandler handler) {
         return ex -> {
             try {
-                if (!path.equals(ex.getRequestURI().getPath())) {
+                if (path != null && !path.equals(ex.getRequestURI().getPath())) {
                     respond(ex, 404, "Not Found");
                     return;
                 }
@@ -102,7 +113,7 @@ public final class App {
         return null;
     }
 
-    private static void respond(HttpExchange ex, int status, String body) throws IOException {
+    static void respond(HttpExchange ex, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
         ex.sendResponseHeaders(status, bytes.length);

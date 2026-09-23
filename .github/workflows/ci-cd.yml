@@ -1,6 +1,6 @@
 name: CI/CD
 
-# Chaîne : build & tests -> image (construite une seule fois) -> scan + test Kubernetes
+# Chaîne : build & tests (Java + Angular) -> image (construite une seule fois) -> scan + test Kubernetes
 #          -> publication GHCR -> Render + staging (branche par défaut) / release + production (tags v*)
 
 on:
@@ -70,6 +70,33 @@ jobs:
           path: target/first-app.jar
           retention-days: 14
 
+  frontend:
+    name: Frontend (Angular)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Installer les dépendances
+        run: npm ci --no-audit --no-fund
+
+      - name: Tests unitaires
+        run: npx ng test --watch=false
+
+      # Le build de production (budgets de taille compris) est refait dans l'image Docker ;
+      # il est vérifié ici pour échouer tôt.
+      - name: Build de production
+        run: npx ng build
+
   chart:
     name: Helm chart
     runs-on: ubuntu-latest
@@ -97,7 +124,7 @@ jobs:
 
   image:
     name: Docker image
-    needs: build
+    needs: [build, frontend]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

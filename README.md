@@ -1,13 +1,13 @@
 # first-app
 
-Petite application Java 21 (serveur HTTP sans dépendance) livrée par une chaîne CI/CD complète :
-tests, image Docker, analyse de sécurité, déploiement Kubernetes via Helm.
+Petite application Java 21 (serveur HTTP sans dépendance) avec un front-end Angular, livrée par une chaîne CI/CD complète :
+tests, image Docker, analyse de sécurité, déploiement sur Render et Kubernetes via Helm.
 
 ## Application
 
 | Route | Réponse |
 |-------|---------|
-| `GET /` | liste des routes |
+| `GET /` | interface Angular (fichiers statiques embarqués dans le JAR) |
 | `GET /health` | `OK` (sondes Kubernetes) |
 | `GET /hello?name=Alice` | `Hello, Alice!` |
 | `GET /version` | version déployée (ex. `1.2.3`) |
@@ -17,6 +17,25 @@ tests, image Docker, analyse de sécurité, déploiement Kubernetes via Helm.
 - Threads virtuels (Java 21) pour traiter les requêtes.
 - Arrêt propre sur `SIGTERM` : les requêtes en cours se terminent avant l'arrêt.
 - Port configurable par la variable d'environnement `PORT` (8080 par défaut).
+
+## Front-end (Angular)
+
+L'interface (`frontend/`, Angular 22, composants standalone, signals, tests Vitest) permet de saisir un prénom
+et d'appeler `/hello`, et affiche l'état du serveur (`/health`) et la version déployée (`/version`).
+
+Elle est servie par le serveur Java, sur la même origine que l'API (pas de CORS) : le build Angular est copié
+dans le JAR (`static/`) lors de la construction de l'image Docker. `index.html` n'est jamais mis en cache,
+les fichiers à empreinte (`main-XXXX.js`) le sont pour un an.
+
+```bash
+cd frontend
+npm ci
+npm start              # http://localhost:4200, les appels API sont relayés vers le serveur Java sur :8080
+npx ng test            # tests unitaires (Vitest)
+npx ng build           # build de production dans dist/frontend/browser
+```
+
+Node.js 24 (≥ 24.15) est requis.
 
 ## Développement
 
@@ -48,6 +67,7 @@ Le build est reproductible : deux builds du même commit produisent un JAR ident
 flowchart LR
     subgraph CI["CI : chaque push / PR"]
         B[Build & Test<br/>mvn verify] --> I[Image Docker<br/>construite 1 fois]
+        F[Frontend<br/>ng test + ng build] --> I
         C[Chart Helm<br/>lint + kubeconform]
         I --> S[Smoke test<br/>+ scan Grype]
         S --> K[Test Kubernetes<br/>kind + helm test]
@@ -78,7 +98,7 @@ Principes appliqués :
 | `.github/workflows/deploy.yml` | workflow réutilisable de déploiement Helm, appelé pour staging et production |
 | `.github/workflows/deploy-render.yml` | workflow réutilisable de déploiement sur Render |
 | `.github/workflows/codeql.yml` | analyse de sécurité du code à chaque push/PR (dépôts publics) |
-| `.github/dependabot.yml` | mises à jour hebdomadaires : Maven, actions GitHub, images Docker |
+| `.github/dependabot.yml` | mises à jour hebdomadaires : Maven, npm (Angular), actions GitHub, images Docker |
 
 ### Versions
 

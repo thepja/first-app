@@ -1,12 +1,23 @@
 # syntax=docker/dockerfile:1
 
 # Images de base épinglées par digest (mises à jour par Dependabot)
+
+# 1. Front-end Angular
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+COPY frontend/ ./
+RUN npx ng build
+
+# 2. Serveur Java, avec le front-end embarqué dans le JAR (classpath static/)
 FROM eclipse-temurin:21-jdk-noble@sha256:4d271cd5e0624598cf563342f47281b09cb364bc13acbbd7251f49f83470018d AS build
 WORKDIR /build
 COPY .mvn .mvn
 COPY mvnw pom.xml ./
 RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q dependency:go-offline
 COPY src src
+COPY --from=frontend /frontend/dist/frontend/browser src/main/resources/static
 # Les tests et contrôles qualité sont exécutés par la CI avant la construction de l'image.
 # Version : REVISION (CI), sinon 0.0.0-<sha court> quand Render construit l'image, sinon SNAPSHOT.
 ARG REVISION=""
