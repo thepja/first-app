@@ -25,7 +25,7 @@ jobs:
   build:
     name: Build & Test
     # Formatage, compilation stricte, tests unitaires + intégration, couverture >= 80 %
-    uses: thepja/template-ci-cd/.github/workflows/java-maven-ci.yml@607725ae3cfc43c3e0ec04636ff441eff82ebd5e # v1.1.0
+    uses: thepja/template-ci-cd/.github/workflows/java-maven-ci.yml@245cea651d50d3ad502c10937ef81a642583b6b5 # v1.0.0
     with:
       java-version: '21'
       artifact-path: target/first-app.jar
@@ -35,7 +35,7 @@ jobs:
     name: Frontend (Angular)
     # Le build de production (budgets de taille compris) est refait dans l'image Docker ;
     # il est vérifié ici pour échouer tôt.
-    uses: thepja/template-ci-cd/.github/workflows/node-ci.yml@607725ae3cfc43c3e0ec04636ff441eff82ebd5e # v1.1.0
+    uses: thepja/template-ci-cd/.github/workflows/node-ci.yml@245cea651d50d3ad502c10937ef81a642583b6b5 # v1.0.0
     with:
       node-versions: '["24"]'
       working-directory: frontend
@@ -48,13 +48,13 @@ jobs:
       actions: read
       contents: read
       security-events: write
-    uses: thepja/template-ci-cd/.github/workflows/codeql.yml@607725ae3cfc43c3e0ec04636ff441eff82ebd5e # v1.1.0
+    uses: thepja/template-ci-cd/.github/workflows/codeql.yml@245cea651d50d3ad502c10937ef81a642583b6b5 # v1.0.0
     with:
       languages: java-kotlin
 
   chart:
     name: Helm chart
-    uses: thepja/template-ci-cd/.github/workflows/helm-lint.yml@607725ae3cfc43c3e0ec04636ff441eff82ebd5e # v1.1.0
+    uses: thepja/template-ci-cd/.github/workflows/helm-lint.yml@245cea651d50d3ad502c10937ef81a642583b6b5 # v1.0.0
     with:
       chart: helm/first-app
       values-files: values-staging.yaml values-production.yaml
@@ -62,7 +62,7 @@ jobs:
   image:
     name: Docker image
     needs: [build, frontend]
-    uses: thepja/template-ci-cd/.github/workflows/docker-build.yml@607725ae3cfc43c3e0ec04636ff441eff82ebd5e # v1.1.0
+    uses: thepja/template-ci-cd/.github/workflows/docker-build.yml@245cea651d50d3ad502c10937ef81a642583b6b5 # v1.0.0
     with:
       build-args: REVISION=${{ needs.build.outputs.version }}
       local-tag: first-app:ci
@@ -76,7 +76,7 @@ jobs:
   k8s-test:
     name: Kubernetes (kind)
     needs: [image, chart]
-    uses: thepja/template-ci-cd/.github/workflows/k8s-test.yml@607725ae3cfc43c3e0ec04636ff441eff82ebd5e # v1.1.0
+    uses: thepja/template-ci-cd/.github/workflows/k8s-test.yml@245cea651d50d3ad502c10937ef81a642583b6b5 # v1.0.0
     with:
       chart: helm/first-app
       release: first-app
@@ -94,7 +94,7 @@ jobs:
       packages: write
       id-token: write
       attestations: write
-    uses: thepja/template-ci-cd/.github/workflows/docker-publish.yml@607725ae3cfc43c3e0ec04636ff441eff82ebd5e # v1.1.0
+    uses: thepja/template-ci-cd/.github/workflows/docker-publish.yml@245cea651d50d3ad502c10937ef81a642583b6b5 # v1.0.0
     with:
       local-tag: first-app:ci
 
@@ -102,7 +102,7 @@ jobs:
     name: Deploy staging
     if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
     needs: publish
-    uses: thepja/template-ci-cd/.github/workflows/deploy-helm.yml@607725ae3cfc43c3e0ec04636ff441eff82ebd5e # v1.1.0
+    uses: thepja/template-ci-cd/.github/workflows/deploy-helm.yml@245cea651d50d3ad502c10937ef81a642583b6b5 # v1.0.0
     with:
       environment: staging
       image: ${{ needs.publish.outputs.image }}:${{ needs.publish.outputs.tag }}
@@ -116,7 +116,7 @@ jobs:
     name: Deploy Render
     if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
     needs: [build, publish]
-    uses: thepja/template-ci-cd/.github/workflows/deploy-render.yml@607725ae3cfc43c3e0ec04636ff441eff82ebd5e # v1.1.0
+    uses: thepja/template-ci-cd/.github/workflows/deploy-render.yml@245cea651d50d3ad502c10937ef81a642583b6b5 # v1.0.0
     with:
       ref: ${{ github.sha }}
       expected-version: ${{ needs.build.outputs.version }}
@@ -130,7 +130,7 @@ jobs:
     needs: publish
     permissions:
       contents: write
-    uses: thepja/template-ci-cd/.github/workflows/github-release.yml@607725ae3cfc43c3e0ec04636ff441eff82ebd5e # v1.1.0
+    uses: thepja/template-ci-cd/.github/workflows/github-release.yml@245cea651d50d3ad502c10937ef81a642583b6b5 # v1.0.0
     with:
       artifact-name: first-app-jar
       files: first-app.jar
@@ -139,7 +139,7 @@ jobs:
     name: Deploy production
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [publish, release]
-    uses: thepja/template-ci-cd/.github/workflows/deploy-helm.yml@607725ae3cfc43c3e0ec04636ff441eff82ebd5e # v1.1.0
+    uses: thepja/template-ci-cd/.github/workflows/deploy-helm.yml@245cea651d50d3ad502c10937ef81a642583b6b5 # v1.0.0
     with:
       environment: production
       image: ${{ needs.publish.outputs.image }}:${{ needs.publish.outputs.tag }}
