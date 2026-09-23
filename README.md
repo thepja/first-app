@@ -92,12 +92,12 @@ Principes appliqués :
 
 ### Workflows
 
+Les étapes de la chaîne sont des **workflows réutilisables** du dépôt [thepja/template-ci-cd](https://github.com/thepja/template-ci-cd),
+partagé entre mes projets et épinglé par SHA de commit. Ce dépôt ne contient aucun script de CI/CD : seulement l'assemblage des étapes et les descriptions propres à l'application (Dockerfile, chart Helm, `render.yaml`).
+
 | Fichier | Rôle |
 |---------|------|
-| `.github/workflows/ci-cd.yml` | pipeline principal (schéma ci-dessus) |
-| `.github/workflows/deploy.yml` | workflow réutilisable de déploiement Helm, appelé pour staging et production |
-| `.github/workflows/deploy-render.yml` | workflow réutilisable de déploiement sur Render |
-| `.github/workflows/codeql.yml` | analyse de sécurité du code à chaque push/PR (dépôts publics) |
+| `.github/workflows/ci-cd.yml` | seul workflow du projet : assemble `java-maven-ci`, `node-ci`, `codeql`, `helm-lint`, `docker-build`, `k8s-test`, `docker-publish`, `deploy-helm`, `deploy-render` et `github-release` du template |
 | `.github/dependabot.yml` | mises à jour hebdomadaires : Maven, npm (Angular), actions GitHub, images Docker |
 
 ### Versions
@@ -136,7 +136,10 @@ Ce que le chart met en place :
 Déploiement manuel :
 
 ```bash
-scripts/helm-deploy.sh staging ghcr.io/thepja/first-app:sha-abc1234
+helm upgrade --install first-app helm/first-app -n first-app-staging --create-namespace \
+  -f helm/first-app/values-staging.yaml \
+  --set image.repository=ghcr.io/thepja/first-app --set-string image.tag=sha-abc1234 \
+  --atomic --wait --timeout 5m
 helm test first-app -n first-app-staging
 helm history first-app -n first-app-staging
 helm rollback first-app -n first-app-staging
@@ -182,4 +185,4 @@ Sur le plan gratuit, le service se met en veille après 15 minutes sans trafic ;
    - Dans chacun, ajouter le secret `KUBE_CONFIG` : le kubeconfig encodé en base64 (`base64 -w0 kubeconfig`), idéalement celui d'un ServiceAccount limité au namespace `first-app-<env>`. Sans ce secret, le déploiement est ignoré avec un avertissement.
    - Sur `production` : activer *Required reviewers* (validation manuelle) et limiter les déploiements aux tags `v*`.
 2. **Image GHCR** : la rendre publique (*Packages → first-app → Package settings*) ou créer un secret de pull dans chaque namespace et le référencer dans `imagePullSecrets`.
-3. **Protection de branche** sur la branche par défaut : exiger une PR et le succès des jobs *Build & Test*, *Helm chart*, *Docker image*, *Kubernetes (kind)* et *CodeQL*.
+3. **Protection de branche** sur la branche par défaut : exiger une PR et le succès des checks *Build & Test / Maven*, *Frontend (Angular) / Node 24*, *Helm chart / Helm lint*, *Docker image / Build, smoke test et scan*, *Kubernetes (kind) / Déploiement kind* et *CodeQL / Analyse* (les workflows réutilisables préfixent le nom du job appelant).
