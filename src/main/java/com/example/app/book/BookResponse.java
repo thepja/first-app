@@ -10,5 +10,6 @@ record BookResponse(
         LocalDate readOn,
         int rating,
         String comment,
+        String coverUrl,
         Instant createdAt,
         Instant updatedAt) {}

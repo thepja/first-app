@@ -31,7 +31,7 @@ class SecurityConfig {
             "; ",
             "default-src 'self'",
             "style-src 'self' 'unsafe-inline'", // styles de composants injectés par Angular
-            "img-src 'self' data:",
+            "img-src 'self' data: blob:", // blob: aperçu de la couverture avant envoi
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",

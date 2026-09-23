@@ -64,3 +64,57 @@
 .empty {
   text-align: center;
 }
+.book {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.book-body {
+  min-width: 0;
+}
+.cover {
+  width: 72px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--bg);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 15%);
+}
+.cover.placeholder {
+  display: grid;
+  place-items: center;
+  font-size: 1.75rem;
+  box-shadow: none;
+  border: 1px dashed var(--border);
+  box-sizing: border-box;
+}
+.cover-field {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.cover-field .cover {
+  width: 96px;
+}
+.cover-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.file-button {
+  margin: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.file-button:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+}
+.file-button.busy {
+  opacity: 0.6;
+  cursor: wait;
+}

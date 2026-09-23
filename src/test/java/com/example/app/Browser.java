@@ -1,5 +1,6 @@
 package com.example.app;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.CookieManager;
@@ -9,6 +10,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 /**
@@ -39,6 +41,34 @@ public final class Browser {
 
     public HttpResponse<String> put(String path, String json) {
         return send(withCsrf(json("PUT", path, json)));
+    }
+
+    /** Envoi de fichier (multipart/form-data), comme un FormData Angular. */
+    public HttpResponse<String> putFile(
+            String path, String field, String filename, String contentType, byte[] content) {
+        String boundary = "----first-app-" + System.nanoTime();
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        body.writeBytes(("--" + boundary + "\r\n"
+                        + "Content-Disposition: form-data; name=\"" + field + "\"; filename=\"" + filename + "\"\r\n"
+                        + "Content-Type: " + contentType + "\r\n\r\n")
+                .getBytes(StandardCharsets.UTF_8));
+        body.writeBytes(content);
+        body.writeBytes(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+        return send(withCsrf(HttpRequest.newBuilder(uri(path))
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .PUT(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))));
+    }
+
+    public HttpResponse<byte[]> getBytes(String path) {
+        try {
+            return client.send(
+                    HttpRequest.newBuilder(uri(path)).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
     }
 
     public HttpResponse<String> delete(String path) {

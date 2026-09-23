@@ -33,6 +33,31 @@
         <app-star-rating formControlName="rating" label="Note sur 5" />
       </div>
       <div class="field wide">
+        <span class="label">Couverture <span class="optional">(facultatif)</span></span>
+        <div class="cover-field">
+          @if (coverPreview(); as preview) {
+            <img class="cover" [src]="preview" alt="Aperçu de la couverture" />
+          } @else {
+            <div class="cover placeholder" aria-hidden="true">📖</div>
+          }
+          <div class="cover-buttons">
+            <label class="file-button" [class.busy]="preparingCover()">
+              {{ coverPreview() ? "Changer l'image" : 'Choisir une image' }}
+              <input
+                type="file"
+                accept="image/*"
+                class="visually-hidden"
+                [disabled]="preparingCover()"
+                (change)="chooseCover($event)"
+              />
+            </label>
+            @if (coverPreview()) {
+              <button type="button" class="link danger" (click)="clearCover()">Retirer</button>
+            }
+          </div>
+        </div>
+      </div>
+      <div class="field wide">
         <label for="comment">Commentaire <span class="optional">(facultatif)</span></label>
         <textarea id="comment" rows="4" formControlName="comment" maxlength="5000"></textarea>
       </div>
@@ -42,7 +67,7 @@
     }
     <div class="actions">
       <button type="button" class="secondary" (click)="cancel()">Annuler</button>
-      <button type="submit" class="primary" [disabled]="saving()">Enregistrer</button>
+      <button type="submit" class="primary" [disabled]="saving() || preparingCover()">Enregistrer</button>
     </div>
   </form>
 }
@@ -62,6 +87,12 @@
   <ul class="books">
     @for (book of books(); track book.id) {
       <li class="card book">
+        @if (book.coverUrl) {
+          <img class="cover" [src]="book.coverUrl" [alt]="'Couverture de ' + book.title" loading="lazy" />
+        } @else {
+          <div class="cover placeholder" aria-hidden="true">📖</div>
+        }
+        <div class="book-body">
         <div class="book-head">
           <div>
             <h3>{{ book.title }}</h3>
@@ -85,6 +116,7 @@
         <div class="book-actions">
           <button type="button" class="link" (click)="edit(book)">Modifier</button>
           <button type="button" class="link danger" (click)="remove(book)">Supprimer</button>
+        </div>
         </div>
       </li>
     }

@@ -40,6 +40,9 @@ class Book {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "cover_updated_at")
+    private Instant coverUpdatedAt;
+
     protected Book() {}
 
     Book(long ownerId, BookRequest request) {
@@ -57,13 +60,20 @@ class Book {
         this.comment = blankToNull(request.comment());
     }
 
+    /** Date de la dernière couverture envoyée, ou null si le livre n'en a plus. */
+    void coverChanged(Instant when) {
+        this.coverUpdatedAt = when;
+    }
+
     @PreUpdate
     void touch() {
         this.updatedAt = Instant.now();
     }
 
     BookResponse toResponse() {
-        return new BookResponse(id, title, author, readOn, rating, comment, createdAt, updatedAt);
+        String coverUrl =
+                coverUpdatedAt == null ? null : "/api/books/" + id + "/cover?v=" + coverUpdatedAt.toEpochMilli();
+        return new BookResponse(id, title, author, readOn, rating, comment, coverUrl, createdAt, updatedAt);
     }
 
     private static String blankToNull(String value) {

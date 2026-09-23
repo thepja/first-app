@@ -21,6 +21,7 @@ navigateur ──► Spring Boot (un seul service, même origine : pas de CORS)
 |--------|-------|
 | API | Spring Boot 4.1 (Spring MVC, threads virtuels), erreurs au format ProblemDetail (RFC 9457) |
 | Données | PostgreSQL 17, Spring Data JPA / Hibernate 7, migrations Flyway (`src/main/resources/db/migration`) |
+| Images | couvertures stockées dans PostgreSQL (table `book_cover`, séparée pour garder la liste rapide) |
 | Sessions | Spring Session JDBC : les connexions survivent aux redémarrages et aux mises en veille |
 | Front-end | Angular 22 : composants standalone, signals, routes chargées à la demande, tests Vitest |
 
@@ -36,6 +37,9 @@ navigateur ──► Spring Boot (un seul service, même origine : pas de CORS)
 | `POST /api/books` | ajoute un livre (`title`, `author`, `readOn`, `rating` 1-5, `comment`) |
 | `PUT /api/books/{id}` | modifie un livre |
 | `DELETE /api/books/{id}` | supprime un livre |
+| `PUT /api/books/{id}/cover` | envoie la couverture (`multipart/form-data`, champ `file`, JPEG ou PNG, 10 Mo max) |
+| `GET /api/books/{id}/cover?v=…` | couverture (JPEG) ; l'URL change à chaque nouvelle image, d'où un cache d'un an |
+| `DELETE /api/books/{id}/cover` | retire la couverture |
 | `GET /health`, `/health/liveness`, `/health/readiness` | état de l'application (readiness inclut la base) |
 | `GET /version`, `GET /hello?name=…` | version déployée, route de test (utilisées par la CI) |
 
@@ -48,6 +52,9 @@ navigateur ──► Spring Boot (un seul service, même origine : pas de CORS)
 - **Force brute** : 5 échecs en 15 minutes bloquent le compte pour 15 minutes ; même message d'erreur que l'adresse
   existe ou non.
 - **Isolation** : chaque requête est limitée aux livres de l'utilisateur ; ceux des autres répondent 404.
+- **Couvertures** : le serveur décode le fichier sans se fier au type déclaré, refuse ce qui n'est pas un vrai JPEG
+  ou PNG et les images démesurées, puis réencode en JPEG de 800 px au plus. Les métadonnées (EXIF, GPS) et tout
+  contenu caché disparaissent. Le navigateur réduit l'image avant l'envoi (≈ 20 à 120 Ko par couverture).
 - **En-têtes** : Content-Security-Policy stricte, `X-Frame-Options`, `X-Content-Type-Options`.
 
 ## Développement

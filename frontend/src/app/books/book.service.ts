@@ -9,6 +9,7 @@ export interface Book {
   readOn: string | null; // AAAA-MM-JJ
   rating: number;
   comment: string | null;
+  coverUrl: string | null; // change à chaque nouvelle couverture (mise en cache sûre)
   createdAt: string;
   updatedAt: string;
 }
@@ -33,5 +34,15 @@ export class BookService {
 
   delete(id: number): Observable<void> {
     return this.http.delete<void>(`/api/books/${id}`);
+  }
+
+  uploadCover(id: number, image: Blob): Observable<Book> {
+    const form = new FormData();
+    form.append('file', image, 'cover.jpg');
+    return this.http.put<Book>(`/api/books/${id}/cover`, form);
+  }
+
+  deleteCover(id: number): Observable<void> {
+    return this.http.delete<void>(`/api/books/${id}/cover`);
   }
 }

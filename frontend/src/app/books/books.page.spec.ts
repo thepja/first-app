@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { registerLocaleData } from '@angular/common';
 import localeFr from '@angular/common/locales/fr';
 import { TestBed } from '@angular/core/testing';
+import { ImageResizer } from '../shared/image-resizer';
 import { Book } from './book.service';
 import { BooksPage } from './books.page';
 
@@ -13,6 +14,7 @@ const DUNE: Book = {
   readOn: '2026-03-14',
   rating: 5,
   comment: 'Un classique.',
+  coverUrl: null,
   createdAt: '2026-03-14T10:00:00Z',
   updatedAt: '2026-03-14T10:00:00Z',
 };
@@ -22,12 +24,24 @@ describe('BooksPage', () => {
   let el: HTMLElement;
   let fixture: ReturnType<typeof TestBed.createComponent<BooksPage>>;
 
-  beforeAll(() => registerLocaleData(localeFr));
+  const resizedCover = new Blob(['jpeg'], { type: 'image/jpeg' });
+  const resizer = { toJpeg: vi.fn(async () => resizedCover) };
+
+  beforeAll(() => {
+    registerLocaleData(localeFr);
+    // jsdom ne fournit pas les URL d'objets utilisées pour l'aperçu
+    URL.createObjectURL = vi.fn(() => 'blob:apercu');
+    URL.revokeObjectURL = vi.fn();
+  });
 
   beforeEach(() => {
     TestBed.configureTestingModule({
       imports: [BooksPage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: ImageResizer, useValue: resizer },
+      ],
     });
     fixture = TestBed.createComponent(BooksPage);
     http = TestBed.inject(HttpTestingController);
@@ -115,5 +129,68 @@ describe('BooksPage', () => {
     await render();
 
     expect(el.querySelector('.book')).toBeNull();
+  });
+
+  async function chooseFile(): Promise<void> {
+    const input = el.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['png'], 'photo.png', { type: 'image/png' })] });
+    input.dispatchEvent(new Event('change'));
+    await Promise.resolve();
+    await render();
+  }
+
+  it('réduit puis envoie la couverture après avoir créé le livre', async () => {
+    http.expectOne('/api/books').flush([]);
+    await render();
+    (el.querySelector('button.primary') as HTMLButtonElement).click();
+    await render();
+    type('#title', 'Dune');
+    (el.querySelectorAll('input[type="radio"]')[4] as HTMLInputElement).click();
+
+    await chooseFile();
+    expect(resizer.toJpeg).toHaveBeenCalled();
+    expect(el.querySelector('.cover-field img')?.getAttribute('src')).toBe('blob:apercu');
+
+    (el.querySelector('form') as HTMLFormElement).dispatchEvent(new Event('submit'));
+    http.expectOne({ method: 'POST', url: '/api/books' }).flush(DUNE);
+    const upload = http.expectOne({ method: 'PUT', url: '/api/books/1/cover' });
+    expect((upload.request.body as FormData).get('file')).toBeInstanceOf(Blob);
+    upload.flush({ ...DUNE, coverUrl: '/api/books/1/cover?v=1' });
+    await render();
+
+    const cover = el.querySelector('.book img.cover') as HTMLImageElement;
+    expect(cover.getAttribute('src')).toBe('/api/books/1/cover?v=1');
+    expect(cover.alt).toBe('Couverture de Dune');
+  });
+
+  it('retire la couverture d’un livre', async () => {
+    http.expectOne('/api/books').flush([{ ...DUNE, coverUrl: '/api/books/1/cover?v=1' }]);
+    await render();
+    (el.querySelector('.book-actions button') as HTMLButtonElement).click(); // Modifier
+    await render();
+
+    (el.querySelector('.cover-buttons button.danger') as HTMLButtonElement).click();
+    await render();
+    (el.querySelector('form') as HTMLFormElement).dispatchEvent(new Event('submit'));
+
+    http.expectOne({ method: 'PUT', url: '/api/books/1' }).flush({ ...DUNE, coverUrl: '/api/books/1/cover?v=1' });
+    http.expectOne({ method: 'DELETE', url: '/api/books/1/cover' }).flush(null, { status: 204, statusText: 'No Content' });
+    await render();
+
+    expect(el.querySelector('.book img.cover')).toBeNull();
+    expect(el.querySelector('.book .placeholder')).not.toBeNull();
+  });
+
+  it('signale une image illisible', async () => {
+    resizer.toJpeg.mockRejectedValueOnce(new Error('format'));
+    http.expectOne('/api/books').flush([]);
+    await render();
+    (el.querySelector('button.primary') as HTMLButtonElement).click();
+    await render();
+
+    await chooseFile();
+    await render();
+
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain("n'a pas pu être lue");
   });
 });
