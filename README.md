@@ -93,14 +93,11 @@ Principes appliqués :
 ### Workflows
 
 Les étapes de la chaîne sont des **workflows réutilisables** du dépôt [thepja/template-ci-cd](https://github.com/thepja/template-ci-cd),
-partagé entre mes projets et épinglé par SHA de commit. Ce dépôt ne garde que l'assemblage et ce qui lui est propre.
+partagé entre mes projets et épinglé par SHA de commit. Ce dépôt ne contient aucun script de CI/CD : seulement l'assemblage des étapes et les descriptions propres à l'application (Dockerfile, chart Helm, `render.yaml`).
 
 | Fichier | Rôle |
 |---------|------|
-| `.github/workflows/ci-cd.yml` | pipeline principal (schéma ci-dessus), qui appelle `java-maven-ci`, `node-ci`, `helm-lint`, `docker-build`, `k8s-test`, `docker-publish`, `deploy-helm`, `deploy-render` et `github-release` du template |
-| `.github/workflows/codeql.yml` | analyse de sécurité du code à chaque push/PR (dépôts publics), via `codeql` du template |
-| `scripts/smoke-test.sh` | smoke test du conteneur, lancé par `docker-build` |
-| `scripts/helm-deploy.sh` | déploiement Helm manuel (même commande que `deploy-helm`) |
+| `.github/workflows/ci-cd.yml` | seul workflow du projet : assemble `java-maven-ci`, `node-ci`, `codeql`, `helm-lint`, `docker-build`, `k8s-test`, `docker-publish`, `deploy-helm`, `deploy-render` et `github-release` du template |
 | `.github/dependabot.yml` | mises à jour hebdomadaires : Maven, npm (Angular), actions GitHub, images Docker |
 
 ### Versions
@@ -139,7 +136,10 @@ Ce que le chart met en place :
 Déploiement manuel :
 
 ```bash
-scripts/helm-deploy.sh staging ghcr.io/thepja/first-app:sha-abc1234
+helm upgrade --install first-app helm/first-app -n first-app-staging --create-namespace \
+  -f helm/first-app/values-staging.yaml \
+  --set image.repository=ghcr.io/thepja/first-app --set-string image.tag=sha-abc1234 \
+  --atomic --wait --timeout 5m
 helm test first-app -n first-app-staging
 helm history first-app -n first-app-staging
 helm rollback first-app -n first-app-staging
