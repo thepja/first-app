@@ -67,6 +67,11 @@ ingress:
 database:
   existingSecret: first-app-db
 
+# PostgreSQL jetable pour tester le chart en CI (values-ci.yaml). Jamais en staging ni en production.
+testDatabase:
+  enabled: false
+  image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+
 resources:
   requests:
     cpu: 100m

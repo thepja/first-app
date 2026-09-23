@@ -151,6 +151,7 @@ helm/first-app/
 ├── values.schema.json       # validation des valeurs (erreur explicite si une valeur est invalide)
 ├── values-staging.yaml      # 1 réplica
 ├── values-production.yaml   # autoscaling 3-10, PDB, NetworkPolicy, répartition sur les nœuds
+├── values-ci.yaml           # CI uniquement : PostgreSQL jetable pour tester le chart sur kind
 └── templates/               # Deployment, Service, ServiceAccount, Ingress, HPA, PDB, NetworkPolicy, test
 ```
 
@@ -161,7 +162,7 @@ Ce que le chart met en place :
 | Sondes | `startupProbe`, `readinessProbe`, `livenessProbe` sur `/health` |
 | Mise à jour | `RollingUpdate` avec `maxUnavailable: 0` |
 | Arrêt | `preStop` de 5 s (le temps que le Service retire le pod), puis `SIGTERM` et arrêt propre de la JVM |
-| Base de données | Secret `first-app-db` (clés `url`, `username`, `password`) à créer dans chaque namespace, hors du chart |
+| Base de données | Secret `first-app-db` (clés `url`, `username`, `password`) à créer dans chaque namespace, hors du chart ; en CI, `values-ci.yaml` fournit une base jetable |
 | Sécurité | non-root, système de fichiers en lecture seule, aucune capability, seccomp `RuntimeDefault`, pas de jeton d'API monté |
 | Disponibilité (prod) | HPA, PodDisruptionBudget, `topologySpreadConstraints` |
 | Réseau (prod) | NetworkPolicy : seul le port HTTP accepte du trafic entrant |

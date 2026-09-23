@@ -6,6 +6,9 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate # le schéma est géré par Flyway (src/main/resources/db/migration)
+  flyway:
+    # Au démarrage, attend la base si elle n'est pas encore prête (réveil de Render, démarrage simultané sur Kubernetes)
+    connect-retries: 20
   session:
     jdbc:
       initialize-schema: never # tables créées par Flyway (V2)

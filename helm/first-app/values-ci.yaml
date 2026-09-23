@@ -1,0 +1,4 @@
+# Uniquement pour le test du chart sur kind (job « Kubernetes (kind) » de la CI) :
+# déploie un PostgreSQL jetable et le Secret de connexion correspondant.
+testDatabase:
+  enabled: true

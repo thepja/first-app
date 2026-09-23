@@ -66,10 +66,23 @@ jobs:
     with:
       build-args: REVISION=${{ needs.build.outputs.version }}
       local-tag: first-app:ci
-      # Conteneur en lecture seule, puis arrêt propre sur SIGTERM vérifié
-      smoke-checks: |
-        /health
-        /hello?name=CI Hello, CI!
+      # L'application a besoin de PostgreSQL : smoke test personnalisé (base jetable + conteneur en
+      # lecture seule), à la place du smoke test HTTP intégré qui démarre l'image seule
+      smoke-checks: ''
+      smoke-command: |
+        docker network create smoke
+        docker run -d --network smoke --name db -e POSTGRES_PASSWORD=smoke \
+          postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+        docker run -d --network smoke -p 8080:8080 --read-only --tmpfs /tmp --name app \
+          -e SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/postgres \
+          -e SPRING_DATASOURCE_USERNAME=postgres -e SPRING_DATASOURCE_PASSWORD=smoke "$IMAGE"
+        trap 'docker logs app; docker rm -f app db >/dev/null 2>&1 || true' EXIT
+        for _ in $(seq 1 90); do curl -fs -o /dev/null http://localhost:8080/health/readiness && break; sleep 1; done
+        curl -fsS http://localhost:8080/health/readiness
+        test "$(curl -fsS 'http://localhost:8080/hello?name=CI')" = "Hello, CI!"
+        curl -fsS http://localhost:8080/ | grep -q '<app-root>'
+        docker stop --time 10 app
+        test "$(docker inspect -f '{{.State.ExitCode}}' app)" != 137 # arrêt propre sur SIGTERM
       scanner: grype
       scan-severity: high
 
@@ -81,7 +94,8 @@ jobs:
       chart: helm/first-app
       release: first-app
       namespace: first-app-production
-      values-files: values-production.yaml
+      # values-ci.yaml ajoute un PostgreSQL jetable dans le namespace de test
+      values-files: values-production.yaml values-ci.yaml
       local-tag: first-app:ci
       rollout-test-args: --set-string podAnnotations.rollout=${{ github.run_id }}
 
