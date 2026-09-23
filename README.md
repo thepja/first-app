@@ -78,7 +78,8 @@ cd frontend && npx ng test     # tests Angular
 
 Nouvelle évolution du schéma : ajouter un fichier `V5__description.sql` dans `db/migration` (ne jamais modifier une
 migration déjà déployée). C'est aussi comme cela qu'on ajoute une catégorie :
-`insert into category (code, label, position) values ('TRAVEL', 'Voyage', 115);`
+`insert into category (code, label, position) values ('MUSIC', 'Musique', 175);` (la position fixe l'ordre
+d'affichage : les catégories sont triées par ordre alphabétique, de 10 en 10, « Autre » à 999).
 
 Contrôles exécutés par `./mvnw verify`, en local comme en CI :
 

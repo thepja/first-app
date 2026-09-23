@@ -124,8 +124,10 @@ class BookIT extends IntegrationTest {
         var response = alice.get("/api/categories");
         assertThat(response.statusCode()).isEqualTo(200);
         JsonNode categories = body(response);
-        assertThat(categories.get(0).get("code").asString()).isEqualTo("NOVEL");
-        assertThat(categories.get(0).get("label").asString()).isEqualTo("Roman");
+        assertThat(categories).hasSize(26);
+        // Ordre alphabétique des libellés, « Autre » en dernier
+        assertThat(categories.get(0).get("label").asString()).isEqualTo("Art / Photo");
+        assertThat(categories.get(6).get("label").asString()).isEqualTo("Économie / Entreprise");
         assertThat(categories.get(categories.size() - 1).get("code").asString()).isEqualTo("OTHER");
         assertThat(browser().get("/api/categories").statusCode()).isEqualTo(401);
     }
