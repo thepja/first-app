@@ -118,3 +118,27 @@
   opacity: 0.6;
   cursor: wait;
 }
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.filter label {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.filter select {
+  width: auto;
+  padding: 6px 10px;
+}
+.badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}

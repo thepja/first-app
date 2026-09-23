@@ -25,6 +25,15 @@
         <input id="author" type="text" formControlName="author" maxlength="200" />
       </div>
       <div class="field">
+        <label for="category">Catégorie <span class="optional">(facultatif)</span></label>
+        <select id="category" formControlName="category">
+          <option value="">— Aucune —</option>
+          @for (category of categories(); track category.code) {
+            <option [value]="category.code">{{ category.label }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
         <label for="readOn">Lu le <span class="optional">(facultatif)</span></label>
         <input id="readOn" type="date" formControlName="readOn" [max]="today" />
       </div>
@@ -76,6 +85,18 @@
   <p class="error" role="alert">{{ message }}</p>
 }
 
+@if (usedCategories().length) {
+  <div class="filter">
+    <label for="filter">Catégorie</label>
+    <select id="filter" [value]="activeFilter()" (change)="setFilter($event)">
+      <option value="">Toutes ({{ books().length }})</option>
+      @for (category of usedCategories(); track category.code) {
+        <option [value]="category.code">{{ category.label }} ({{ category.count }})</option>
+      }
+    </select>
+  </div>
+}
+
 @if (loading()) {
   <p class="muted">Chargement…</p>
 } @else if (!books().length && editing() === null) {
@@ -85,7 +106,7 @@
   </div>
 } @else {
   <ul class="books">
-    @for (book of books(); track book.id) {
+    @for (book of visibleBooks(); track book.id) {
       <li class="card book">
         @if (book.coverUrl) {
           <img class="cover" [src]="book.coverUrl" [alt]="'Couverture de ' + book.title" loading="lazy" />
@@ -96,6 +117,9 @@
         <div class="book-head">
           <div>
             <h3>{{ book.title }}</h3>
+            @if (categoryLabel(book.category); as label) {
+              <span class="badge">{{ label }}</span>
+            }
             <p class="meta">
               @if (book.author) {
                 {{ book.author }}

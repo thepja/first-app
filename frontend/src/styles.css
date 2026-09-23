@@ -75,6 +75,7 @@ label,
 }
 
 input:not([type='radio']),
+select,
 textarea {
   box-sizing: border-box;
   width: 100%;
@@ -85,7 +86,12 @@ textarea {
   background: transparent;
   color: inherit;
 }
+select option {
+  color: var(--text);
+  background: var(--surface);
+}
 input:focus-visible,
+select:focus-visible,
 textarea:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--accent);

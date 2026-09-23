@@ -7,6 +7,11 @@ import { ImageResizer } from '../shared/image-resizer';
 import { Book } from './book.service';
 import { BooksPage } from './books.page';
 
+const CATEGORIES = [
+  { code: 'NOVEL', label: 'Roman' },
+  { code: 'SCI_FI', label: 'Science-fiction' },
+];
+
 const DUNE: Book = {
   id: 1,
   title: 'Dune',
@@ -14,6 +19,7 @@ const DUNE: Book = {
   readOn: '2026-03-14',
   rating: 5,
   comment: 'Un classique.',
+  category: null,
   coverUrl: null,
   createdAt: '2026-03-14T10:00:00Z',
   updatedAt: '2026-03-14T10:00:00Z',
@@ -47,6 +53,7 @@ describe('BooksPage', () => {
     http = TestBed.inject(HttpTestingController);
     el = fixture.nativeElement as HTMLElement;
     fixture.detectChanges();
+    http.expectOne('/api/categories').flush(CATEGORIES);
   });
 
   afterEach(() => http.verify());
@@ -192,5 +199,48 @@ describe('BooksPage', () => {
     await render();
 
     expect(el.querySelector('[role="alert"]')?.textContent).toContain("n'a pas pu être lue");
+  });
+
+  it('propose les catégories et enregistre celle choisie', async () => {
+    http.expectOne('/api/books').flush([]);
+    await render();
+    (el.querySelector('button.primary') as HTMLButtonElement).click();
+    await render();
+
+    const select = el.querySelector('#category') as HTMLSelectElement;
+    expect([...select.options].map((o) => o.textContent?.trim())).toEqual(['— Aucune —', 'Roman', 'Science-fiction']);
+    select.value = 'SCI_FI';
+    select.dispatchEvent(new Event('change'));
+    type('#title', 'Dune');
+    (el.querySelectorAll('input[type="radio"]')[4] as HTMLInputElement).click();
+    (el.querySelector('form') as HTMLFormElement).dispatchEvent(new Event('submit'));
+
+    const req = http.expectOne({ method: 'POST', url: '/api/books' });
+    expect(req.request.body.category).toBe('SCI_FI');
+    req.flush({ ...DUNE, category: 'SCI_FI' });
+    await render();
+
+    expect(el.querySelector('.book .badge')?.textContent?.trim()).toBe('Science-fiction');
+  });
+
+  it('filtre la liste par catégorie', async () => {
+    http.expectOne('/api/books').flush([
+      { ...DUNE, category: 'SCI_FI' },
+      { ...DUNE, id: 2, title: 'Madame Bovary', category: 'NOVEL' },
+      { ...DUNE, id: 3, title: 'Sans catégorie' },
+    ]);
+    await render();
+
+    const filter = el.querySelector('#filter') as HTMLSelectElement;
+    expect([...filter.options].map((o) => o.textContent?.trim())).toEqual([
+      'Toutes (3)',
+      'Roman (1)',
+      'Science-fiction (1)',
+    ]);
+    filter.value = 'NOVEL';
+    filter.dispatchEvent(new Event('change'));
+    await render();
+
+    expect([...el.querySelectorAll('.book h3')].map((h) => h.textContent?.trim())).toEqual(['Madame Bovary']);
   });
 });

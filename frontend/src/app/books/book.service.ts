@@ -9,16 +9,26 @@ export interface Book {
   readOn: string | null; // AAAA-MM-JJ
   rating: number;
   comment: string | null;
+  category: string | null; // code d'une catégorie
   coverUrl: string | null; // change à chaque nouvelle couverture (mise en cache sûre)
   createdAt: string;
   updatedAt: string;
 }
 
-export type BookInput = Pick<Book, 'title' | 'author' | 'readOn' | 'rating' | 'comment'>;
+export type BookInput = Pick<Book, 'title' | 'author' | 'readOn' | 'rating' | 'comment' | 'category'>;
+
+export interface Category {
+  code: string;
+  label: string;
+}
 
 @Injectable({ providedIn: 'root' })
 export class BookService {
   private readonly http = inject(HttpClient);
+
+  categories(): Observable<Category[]> {
+    return this.http.get<Category[]>('/api/categories');
+  }
 
   list(): Observable<Book[]> {
     return this.http.get<Book[]>('/api/books');

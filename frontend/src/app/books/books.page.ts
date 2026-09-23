@@ -5,7 +5,7 @@ import { Observable, concatMap, map, of } from 'rxjs';
 import { errorMessage } from '../auth/auth.service';
 import { ImageResizer } from '../shared/image-resizer';
 import { StarRating } from '../shared/star-rating';
-import { Book, BookInput, BookService } from './book.service';
+import { Book, BookInput, BookService, Category } from './book.service';
 
 @Component({
   selector: 'app-books-page',
@@ -19,6 +19,25 @@ export class BooksPage implements OnInit {
   private readonly resizer = inject(ImageResizer);
 
   protected readonly books = signal<Book[]>([]);
+  protected readonly categories = signal<Category[]>([]);
+  /** Code de la catégorie filtrée, '' pour toutes. */
+  protected readonly filter = signal('');
+  /** Filtre effectif : revient à « toutes » si plus aucun livre n'est dans la catégorie choisie. */
+  protected readonly activeFilter = computed(() => {
+    const code = this.filter();
+    return this.books().some((b) => b.category === code) ? code : '';
+  });
+  protected readonly visibleBooks = computed(() => {
+    const code = this.activeFilter();
+    return code ? this.books().filter((b) => b.category === code) : this.books();
+  });
+  /** Catégories utilisées dans la bibliothèque, avec leur nombre de livres (pour le filtre). */
+  protected readonly usedCategories = computed(() =>
+    this.categories()
+      .map((category) => ({ ...category, count: this.books().filter((b) => b.category === category.code).length }))
+      .filter((category) => category.count > 0),
+  );
+  private readonly labels = computed(() => new Map(this.categories().map((c) => [c.code, c.label])));
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
   /** null : formulaire fermé ; 'new' : ajout ; sinon id du livre modifié. */
@@ -49,9 +68,14 @@ export class BooksPage implements OnInit {
     readOn: [''],
     rating: [0, [Validators.required, Validators.min(1), Validators.max(5)]],
     comment: ['', Validators.maxLength(5000)],
+    category: [''],
   });
 
   ngOnInit(): void {
+    this.api.categories().subscribe({
+      next: (categories) => this.categories.set(categories),
+      error: () => this.categories.set([]), // le formulaire reste utilisable sans catégorie
+    });
     this.api.list().subscribe({
       next: (books) => {
         this.books.set(books);
@@ -65,7 +89,7 @@ export class BooksPage implements OnInit {
   }
 
   protected add(): void {
-    this.form.reset({ title: '', author: '', readOn: this.today, rating: 0, comment: '' });
+    this.form.reset({ title: '', author: '', readOn: this.today, rating: 0, comment: '', category: this.activeFilter() });
     this.resetCover(null);
     this.formError.set(null);
     this.editing.set('new');
@@ -78,10 +102,19 @@ export class BooksPage implements OnInit {
       readOn: book.readOn ?? '',
       rating: book.rating,
       comment: book.comment ?? '',
+      category: book.category ?? '',
     });
     this.resetCover(book.coverUrl);
     this.formError.set(null);
     this.editing.set(book.id);
+  }
+
+  protected categoryLabel(code: string | null): string | null {
+    return code ? (this.labels().get(code) ?? null) : null;
+  }
+
+  protected setFilter(event: Event): void {
+    this.filter.set((event.target as HTMLSelectElement).value);
   }
 
   protected cancel(): void {
@@ -139,6 +172,7 @@ export class BooksPage implements OnInit {
       readOn: value.readOn || null,
       rating: value.rating,
       comment: value.comment.trim() || null,
+      category: value.category || null,
     };
     const target = this.editing();
     const request = (

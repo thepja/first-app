@@ -118,4 +118,46 @@ class BookIT extends IntegrationTest {
         assertThat(bob.delete("/api/books/" + id).statusCode()).isEqualTo(404);
         assertThat(body(alice.get("/api/books"))).hasSize(1);
     }
+
+    @Test
+    void categoriesAreListedInDisplayOrder() {
+        var response = alice.get("/api/categories");
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode categories = body(response);
+        assertThat(categories.get(0).get("code").asString()).isEqualTo("NOVEL");
+        assertThat(categories.get(0).get("label").asString()).isEqualTo("Roman");
+        assertThat(categories.get(categories.size() - 1).get("code").asString()).isEqualTo("OTHER");
+        assertThat(browser().get("/api/categories").statusCode()).isEqualTo(401);
+    }
+
+    @Test
+    void bookCategoryCanBeSetChangedAndCleared() {
+        var created = body(
+                alice.post("/api/books", """
+                {"title": "Dune", "rating": 5, "category": "SCI_FI"}"""));
+        assertThat(created.get("category").asString()).isEqualTo("SCI_FI");
+        long id = created.get("id").asLong();
+
+        var changed = body(alice.put(
+                "/api/books/" + id, """
+                {"title": "Dune", "rating": 5, "category": "NOVEL"}"""));
+        assertThat(changed.get("category").asString()).isEqualTo("NOVEL");
+
+        var cleared = body(
+                alice.put("/api/books/" + id, """
+                {"title": "Dune", "rating": 5, "category": ""}"""));
+        assertThat(cleared.get("category").isNull()).isTrue();
+        assertThat(body(alice.get("/api/books")).get(0).get("category").isNull())
+                .isTrue();
+    }
+
+    @Test
+    void unknownCategoryIsRejected() {
+        var response =
+                alice.post("/api/books", """
+                {"title": "Dune", "rating": 5, "category": "NOPE"}""");
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(response.body()).contains("Catégorie inconnue");
+        assertThat(body(alice.get("/api/books"))).isEmpty();
+    }
 }

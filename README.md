@@ -1,7 +1,7 @@
 # first-app — Mes lectures
 
 Carnet de lectures en ligne : on crée un compte, on se connecte, et on note les livres lus (note de 1 à 5 étoiles,
-date de lecture, commentaire). Spring Boot 4 + Angular 22 + PostgreSQL 17, livré par une chaîne CI/CD complète :
+catégorie, date de lecture, couverture, commentaire). Spring Boot 4 + Angular 22 + PostgreSQL 17, livré par une chaîne CI/CD complète :
 tests, image Docker, analyse de sécurité, déploiement sur Render et Kubernetes via Helm.
 
 ## Architecture
@@ -34,7 +34,8 @@ navigateur ──► Spring Boot (un seul service, même origine : pas de CORS)
 | `POST /api/auth/logout` | déconnexion |
 | `GET /api/auth/me` | utilisateur connecté (401 sinon) |
 | `GET /api/books` | mes livres, lectures les plus récentes d'abord |
-| `POST /api/books` | ajoute un livre (`title`, `author`, `readOn`, `rating` 1-5, `comment`) |
+| `POST /api/books` | ajoute un livre (`title`, `author`, `readOn`, `rating` 1-5, `comment`, `category`) |
+| `GET /api/categories` | catégories proposées (`code`, `label`), dans l'ordre d'affichage |
 | `PUT /api/books/{id}` | modifie un livre |
 | `DELETE /api/books/{id}` | supprime un livre |
 | `PUT /api/books/{id}/cover` | envoie la couverture (`multipart/form-data`, champ `file`, JPEG ou PNG, 10 Mo max) |
@@ -75,8 +76,9 @@ Pour lancer seulement l'API : `./mvnw spring-boot:test-run -Dspring-boot.run.mai
 cd frontend && npx ng test     # tests Angular
 ```
 
-Nouvelle évolution du schéma : ajouter un fichier `V3__description.sql` dans `db/migration` (ne jamais modifier une
-migration déjà déployée).
+Nouvelle évolution du schéma : ajouter un fichier `V5__description.sql` dans `db/migration` (ne jamais modifier une
+migration déjà déployée). C'est aussi comme cela qu'on ajoute une catégorie :
+`insert into category (code, label, position) values ('TRAVEL', 'Voyage', 115);`
 
 Contrôles exécutés par `./mvnw verify`, en local comme en CI :
 

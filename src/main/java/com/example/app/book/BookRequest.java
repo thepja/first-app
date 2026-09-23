@@ -13,4 +13,6 @@ record BookRequest(
         @Size(max = 200) String author,
         @PastOrPresent LocalDate readOn,
         @NotNull @Min(1) @Max(5) Integer rating,
-        @Size(max = 5000) String comment) {}
+        @Size(max = 5000) String comment,
+        // Code d'une catégorie de /api/categories, ou null
+        @Size(max = 30) String category) {}

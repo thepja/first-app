@@ -28,9 +28,11 @@ import org.springframework.web.bind.annotation.RestController;
 class BookController {
 
     private final BookRepository books;
+    private final CategoryRepository categories;
 
-    BookController(BookRepository books) {
+    BookController(BookRepository books, CategoryRepository categories) {
         this.books = books;
+        this.categories = categories;
     }
 
     @GetMapping
@@ -43,6 +45,7 @@ class BookController {
     @Transactional
     ResponseEntity<BookResponse> create(
             @AuthenticationPrincipal CurrentUser user, @Valid @RequestBody BookRequest body) {
+        checkCategory(body);
         BookResponse created = books.saveAndFlush(new Book(user.id(), body)).toResponse();
         return ResponseEntity.created(URI.create("/api/books/" + created.id())).body(created);
     }
@@ -51,6 +54,7 @@ class BookController {
     @Transactional
     BookResponse update(
             @AuthenticationPrincipal CurrentUser user, @PathVariable long id, @Valid @RequestBody BookRequest body) {
+        checkCategory(body);
         Book book = find(user, id);
         book.apply(body);
         return books.saveAndFlush(book).toResponse();
@@ -61,6 +65,13 @@ class BookController {
     @Transactional
     void delete(@AuthenticationPrincipal CurrentUser user, @PathVariable long id) {
         books.delete(find(user, id));
+    }
+
+    private void checkCategory(BookRequest body) {
+        String category = body.category();
+        if (category != null && !category.isBlank() && !categories.existsById(category.strip())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Catégorie inconnue.");
+        }
     }
 
     private Book find(CurrentUser user, long id) {
