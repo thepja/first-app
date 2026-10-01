@@ -27,9 +27,16 @@ export class BooksPage implements OnInit {
     const code = this.filter();
     return this.books().some((b) => b.category === code) ? code : '';
   });
+  /** Texte saisi dans la barre de recherche. */
+  protected readonly query = signal('');
+  /** Mots recherchés, sans accents ni majuscules ; chaque mot doit apparaître dans le titre, l'auteur ou la catégorie. */
+  private readonly terms = computed(() => normalize(this.query()).split(/\s+/).filter(Boolean));
   protected readonly visibleBooks = computed(() => {
     const code = this.activeFilter();
-    return code ? this.books().filter((b) => b.category === code) : this.books();
+    const terms = this.terms();
+    return this.books().filter(
+      (b) => (!code || b.category === code) && terms.every((term) => this.searchText(b).includes(term)),
+    );
   });
   /** Catégories utilisées dans la bibliothèque, avec leur nombre de livres (pour le filtre). */
   protected readonly usedCategories = computed(() =>
@@ -38,6 +45,16 @@ export class BooksPage implements OnInit {
       .filter((category) => category.count > 0),
   );
   private readonly labels = computed(() => new Map(this.categories().map((c) => [c.code, c.label])));
+  /** Texte dans lequel on cherche, calculé une fois par livre et par liste de catégories. */
+  private readonly searchTexts = computed(
+    () =>
+      new Map(
+        this.books().map((b) => [
+          b.id,
+          normalize(`${b.title} ${b.author ?? ''} ${this.categoryLabel(b.category) ?? ''}`),
+        ]),
+      ),
+  );
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
   /** null : formulaire fermé ; 'new' : ajout ; sinon id du livre modifié. */
@@ -109,12 +126,24 @@ export class BooksPage implements OnInit {
     this.editing.set(book.id);
   }
 
+  private searchText(book: Book): string {
+    return this.searchTexts().get(book.id) ?? '';
+  }
+
   protected categoryLabel(code: string | null): string | null {
     return code ? (this.labels().get(code) ?? null) : null;
   }
 
   protected setFilter(event: Event): void {
     this.filter.set((event.target as HTMLSelectElement).value);
+  }
+
+  protected setQuery(event: Event): void {
+    this.query.set((event.target as HTMLInputElement).value);
+  }
+
+  protected clearQuery(): void {
+    this.query.set('');
   }
 
   protected cancel(): void {
@@ -230,6 +259,11 @@ export class BooksPage implements OnInit {
       this.previewObjectUrl = null;
     }
   }
+}
+
+/** Minuscules sans accents, pour une recherche tolérante (« eleve » trouve « Élève »). */
+function normalize(text: string): string {
+  return text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 }
 
 /** Même ordre que le serveur : lectures les plus récentes d'abord, livres sans date en dernier. */

@@ -1,7 +1,8 @@
 # first-app — Mes lectures
 
 Carnet de lectures en ligne : on crée un compte, on se connecte, et on note les livres lus (note de 1 à 5 étoiles,
-catégorie, date de lecture, couverture, commentaire). Spring Boot 4 + Angular 22 + PostgreSQL 17, livré par une chaîne CI/CD complète :
+catégorie, date de lecture, couverture, commentaire), puis on les retrouve avec la barre de recherche (titre, auteur
+ou catégorie, sans tenir compte des accents) et le filtre par catégorie. Spring Boot 4 + Angular 22 + PostgreSQL 17, livré par une chaîne CI/CD complète :
 tests, image Docker, analyse de sécurité, déploiement sur Render et Kubernetes via Helm.
 
 ## Architecture

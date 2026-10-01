@@ -243,4 +243,81 @@ describe('BooksPage', () => {
 
     expect([...el.querySelectorAll('.book h3')].map((h) => h.textContent?.trim())).toEqual(['Madame Bovary']);
   });
+
+  describe('recherche', () => {
+    const LIBRARY: Book[] = [
+      { ...DUNE, category: 'SCI_FI' },
+      { ...DUNE, id: 2, title: 'Madame Bovary', author: 'Gustave Flaubert', category: 'NOVEL' },
+      { ...DUNE, id: 3, title: "L'Élève", author: 'Henry James', category: 'NOVEL' },
+    ];
+
+    function visibleTitles(): (string | undefined)[] {
+      return [...el.querySelectorAll('.book h3')].map((h) => h.textContent?.trim());
+    }
+
+    async function search(text: string): Promise<void> {
+      type('#search', text);
+      await render();
+    }
+
+    beforeEach(async () => {
+      http.expectOne('/api/books').flush(LIBRARY);
+      await render();
+    });
+
+    it('trouve un livre par son titre ou son auteur', async () => {
+      await search('bovary');
+      expect(visibleTitles()).toEqual(['Madame Bovary']);
+
+      await search('HERBERT');
+      expect(visibleTitles()).toEqual(['Dune']);
+      expect(el.querySelector('.results')?.textContent?.trim()).toBe('1 résultat');
+    });
+
+    it('trouve les livres d’une catégorie par son nom', async () => {
+      await search('roman');
+      expect(visibleTitles()).toEqual(['Madame Bovary', "L'Élève"]);
+      expect(el.querySelector('.results')?.textContent?.trim()).toBe('2 résultats');
+    });
+
+    it('ignore les accents et exige tous les mots', async () => {
+      await search('eleve');
+      expect(visibleTitles()).toEqual(["L'Élève"]);
+
+      await search('james eleve');
+      expect(visibleTitles()).toEqual(["L'Élève"]);
+
+      await search('james dune');
+      expect(visibleTitles()).toEqual([]);
+    });
+
+    it('se combine avec le filtre de catégorie', async () => {
+      const filter = el.querySelector('#filter') as HTMLSelectElement;
+      filter.value = 'NOVEL';
+      filter.dispatchEvent(new Event('change'));
+      await search('a'); // présent dans les trois livres
+
+      expect(visibleTitles()).toEqual(['Madame Bovary', "L'Élève"]);
+    });
+
+    it('indique l’absence de résultat et permet d’effacer la recherche', async () => {
+      await search('Proust');
+
+      expect(el.querySelector('.empty')?.textContent).toContain('Aucun livre ne correspond à «\u00a0Proust\u00a0»');
+      expect(el.querySelector('.results')).toBeNull();
+      (el.querySelector('.empty button') as HTMLButtonElement).click();
+      await render();
+
+      expect(visibleTitles()).toHaveLength(3);
+      expect((el.querySelector('#search') as HTMLInputElement).value).toBe('');
+    });
+
+    it('efface la recherche avec Échap', async () => {
+      await search('dune');
+      el.querySelector('#search')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await render();
+
+      expect(visibleTitles()).toHaveLength(3);
+    });
+  });
 });

@@ -85,16 +85,37 @@
   <p class="error" role="alert">{{ message }}</p>
 }
 
-@if (usedCategories().length) {
-  <div class="filter">
-    <label for="filter">Catégorie</label>
-    <select id="filter" [value]="activeFilter()" (change)="setFilter($event)">
-      <option value="">Toutes ({{ books().length }})</option>
-      @for (category of usedCategories(); track category.code) {
-        <option [value]="category.code">{{ category.label }} ({{ category.count }})</option>
-      }
-    </select>
+@if (books().length) {
+  <div class="toolbar">
+    <div class="search">
+      <label for="search" class="visually-hidden">Rechercher un livre</label>
+      <input
+        id="search"
+        type="search"
+        placeholder="Rechercher un titre, un auteur, une catégorie…"
+        autocomplete="off"
+        [value]="query()"
+        (input)="setQuery($event)"
+        (keydown.escape)="clearQuery()"
+      />
+    </div>
+    @if (usedCategories().length) {
+      <div class="filter">
+        <label for="filter">Catégorie</label>
+        <select id="filter" [value]="activeFilter()" (change)="setFilter($event)">
+          <option value="">Toutes ({{ books().length }})</option>
+          @for (category of usedCategories(); track category.code) {
+            <option [value]="category.code">{{ category.label }} ({{ category.count }})</option>
+          }
+        </select>
+      </div>
+    }
   </div>
+  @if (query().trim() && visibleBooks().length) {
+    <p class="results muted" aria-live="polite">
+      {{ visibleBooks().length }} résultat{{ visibleBooks().length > 1 ? 's' : '' }}
+    </p>
+  }
 }
 
 @if (loading()) {
@@ -103,6 +124,11 @@
   <div class="card empty">
     <p>Vous n'avez encore ajouté aucun livre.</p>
     <p class="muted">Notez vos lectures pour garder une trace de ce que vous avez aimé.</p>
+  </div>
+} @else if (!visibleBooks().length && editing() === null) {
+  <div class="card empty">
+    <p aria-live="polite">Aucun livre ne correspond à «&nbsp;{{ query().trim() }}&nbsp;».</p>
+    <button type="button" class="link" (click)="clearQuery()">Effacer la recherche</button>
   </div>
 } @else {
   <ul class="books">

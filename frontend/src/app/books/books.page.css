@@ -118,11 +118,29 @@
   opacity: 0.6;
   cursor: wait;
 }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.search {
+  flex: 1 1 240px;
+}
+.search input {
+  padding-left: 36px;
+  background: no-repeat 12px center / 16px
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2365676b' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+}
+.results {
+  margin: -4px 0 12px;
+  font-size: 0.9rem;
+}
 .filter {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
 }
 .filter label {
   margin: 0;
