@@ -23,6 +23,11 @@
       GHSA-h3x4-894j-xpx5, GHSA-gcx9-497g-6cp6, critiques). À supprimer dès que Spring Boot fournit ≥ 11.0.25.
     -->
     <tomcat.version>11.0.26</tomcat.version>
+    <!--
+      Correctif de sécurité : Spring Boot 4.1.1 embarque Jackson 3.1.5 (GHSA-q4xh-88c3-wmh7, élevée).
+      Corrigée en 3.1.6 ; à supprimer dès que Spring Boot fournit ≥ 3.1.6.
+    -->
+    <jackson-bom.version>3.1.7</jackson-bom.version>
     <!-- Builds reproductibles -->
     <project.build.outputTimestamp>2026-01-01T00:00:00Z</project.build.outputTimestamp>
 
